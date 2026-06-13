@@ -1,9 +1,9 @@
 CFLAGS ?= -Wall -Wextra -Werror -fsanitize=address,undefined -O2
 INCLUDES = -Iinclude
 
-SRCS = src/kvm.o src/virtio.o src/backends/firecracker.o
+SRCS = src/kvm.o src/virtio.o src/backends/firecracker.o src/backends/qemu.o
 
-TEST_BASES = test_create_destroy test_memory test_firecracker
+TEST_BASES = test_create_destroy test_memory test_firecracker test_qemu
 TESTS = $(TEST_BASES)
 ALL_TARGETS = $(TESTS) test_boot_serial
 
@@ -21,6 +21,9 @@ test_boot_serial: src/test_boot_serial.o $(SRCS)
 test_firecracker: src/test_firecracker.o $(SRCS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
+test_qemu: src/test_qemu.o $(SRCS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
+
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
@@ -31,6 +34,6 @@ test: $(TESTS)
 	done
 
 clean:
-	rm -f src/*.o src/backends/*.o $(ALL_TARGETS)
+	rm -f src/*.o src/backends/*.o $(ALL_TARGETS) *.img *.sock
 
 .PHONY: all test clean

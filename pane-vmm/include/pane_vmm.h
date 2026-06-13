@@ -14,6 +14,12 @@ struct pane_vm;
 // Opaque pointer to a VM instance
 typedef struct pane_vm pane_vm_t;
 
+// VM Backend Types
+typedef enum {
+    PANE_BACKEND_NATIVE = 0,
+    PANE_BACKEND_QEMU
+} pane_backend_t;
+
 // Create a new VM.
 // Returns 0 on success, negative errno on failure.
 // The caller owns the returned pointer and must call pane_vm_destroy when done.
@@ -80,5 +86,24 @@ int pane_vm_setup_virtio_mmio(pane_vm_t *vm, uint64_t base_addr, uint64_t size, 
 // Set up a virtio-serial console for the VM.
 // Returns 0 on success, negative errno on failure.
 int pane_vm_set_virtio_console(pane_vm_t *vm);
+
+// Get current VM backend type.
+pane_backend_t pane_vm_get_backend(const pane_vm_t *vm);
+
+// Configure the VM for QEMU mode, spawning QEMU with KVM acceleration and QMP socket.
+// Returns 0 on success, negative errno on failure.
+int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *qmp_socket_path);
+
+// Suspend a QEMU VM.
+// Returns 0 on success, negative errno on failure.
+int pane_vm_qemu_suspend(pane_vm_t *vm);
+
+// Resume a QEMU VM.
+// Returns 0 on success, negative errno on failure.
+int pane_vm_qemu_resume(pane_vm_t *vm);
+
+// Query execution status of QEMU VM (returns e.g., "running", "paused").
+// Returns 0 on success, negative errno on failure.
+int pane_vm_qemu_query_status(pane_vm_t *vm, char *status_out, size_t max_len);
 
 #endif // PANE_VMM_H

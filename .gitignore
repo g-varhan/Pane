@@ -3,6 +3,7 @@ pane-vmm/test_boot_serial
 pane-vmm/test_create_destroy
 pane-vmm/test_memory
 pane-vmm/test_firecracker
+pane-vmm/test_qemu
 
 # Object files
 *.o

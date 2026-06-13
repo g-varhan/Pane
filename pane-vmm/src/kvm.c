@@ -6,37 +6,27 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/wait.h>
 
-#define PANE_VMM_MAX_MEM_SLOTS 256
-#define PANE_VMM_MAX_VCPUS 32
+#include "pane_vmm_internal.h"
 
 // Forward declaration of MMIO handler implemented in virtio.c
 int pane_handle_mmio(pane_vm_t *vm, uint64_t phys_addr, uint8_t *data, uint32_t len, uint8_t is_write);
-
-struct pane_vcpu {
-    int fd;
-    struct kvm_run *run;
-    uint32_t id;
-};
-
-struct pane_vm {
-    int kvm_fd;
-    int vm_fd;
-    struct kvm_userspace_memory_region mem_slots[PANE_VMM_MAX_MEM_SLOTS];
-    struct pane_vcpu vcpus[PANE_VMM_MAX_VCPUS];
-    int vcpu_count;
-    int vcpu_mmap_size;
-    void *virtio_dev; // Opaque pointer to virtio device state
-};
 
 int pane_vm_create(pane_vm_t **vm_out) {
     struct pane_vm *vm = calloc(1, sizeof(struct pane_vm));
     if (!vm) {
         return -ENOMEM;
     }
+
+    vm->backend = PANE_BACKEND_NATIVE;
+    vm->qemu_pid = -1;
+    vm->qmp_fd = -1;
+    vm->qmp_path = NULL;
 
     // Open /dev/kvm
     vm->kvm_fd = open("/dev/kvm", O_RDWR | O_CLOEXEC);
@@ -77,6 +67,32 @@ int pane_vm_create(pane_vm_t **vm_out) {
 void pane_vm_destroy(pane_vm_t *vm) {
     if (!vm) {
         return;
+    }
+
+    if (vm->backend == PANE_BACKEND_QEMU) {
+        if (vm->qmp_fd >= 0) {
+            const char *quit_cmd = "{\"execute\":\"quit\"}\n";
+            ssize_t written = write(vm->qmp_fd, quit_cmd, strlen(quit_cmd));
+            (void)written;
+            close(vm->qmp_fd);
+        }
+        if (vm->qemu_pid > 0) {
+            int status;
+            pid_t res = 0;
+            for (int i = 0; i < 50; i++) {
+                res = waitpid(vm->qemu_pid, &status, WNOHANG);
+                if (res != 0) break;
+                usleep(10000); // 10ms
+            }
+            if (res == 0) {
+                kill(vm->qemu_pid, SIGKILL);
+                waitpid(vm->qemu_pid, &status, 0);
+            }
+        }
+        if (vm->qmp_path) {
+            unlink(vm->qmp_path);
+            free(vm->qmp_path);
+        }
     }
 
     // Cleanup vCPUs
@@ -405,4 +421,9 @@ void *pane_vm_gpa_to_hva(pane_vm_t *vm, uint64_t gpa) {
         }
     }
     return NULL;
+}
+
+pane_backend_t pane_vm_get_backend(const pane_vm_t *vm) {
+    if (!vm) return PANE_BACKEND_NATIVE;
+    return vm->backend;
 }
