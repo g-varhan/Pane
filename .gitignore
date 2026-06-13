@@ -1,0 +1,11 @@
+# Binaries
+pane-vmm/test_boot_serial
+pane-vmm/test_create_destroy
+pane-vmm/test_memory
+
+# Object files
+*.o
+pane-vmm/src/*.o
+
+# Remember folder
+.remember/
