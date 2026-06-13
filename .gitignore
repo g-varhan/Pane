@@ -7,5 +7,7 @@ pane-vmm/test_memory
 *.o
 pane-vmm/src/*.o
 
-# Remember folder
+# AI tooling internals (not for public repo)
+CLAUDE.md
 .remember/
+.gemini/
