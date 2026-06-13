@@ -1,9 +1,9 @@
 CFLAGS ?= -Wall -Wextra -Werror -fsanitize=address,undefined -O2
 INCLUDES = -Iinclude
 
-SRCS = src/kvm.o src/virtio.o
+SRCS = src/kvm.o src/virtio.o src/backends/firecracker.o
 
-TEST_BASES = test_create_destroy test_memory
+TEST_BASES = test_create_destroy test_memory test_firecracker
 TESTS = $(TEST_BASES)
 ALL_TARGETS = $(TESTS) test_boot_serial
 
@@ -18,6 +18,9 @@ test_memory: src/test_memory.o $(SRCS)
 test_boot_serial: src/test_boot_serial.o $(SRCS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
+test_firecracker: src/test_firecracker.o $(SRCS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
+
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
@@ -28,6 +31,6 @@ test: $(TESTS)
 	done
 
 clean:
-	rm -f src/*.o $(ALL_TARGETS)
+	rm -f src/*.o src/backends/*.o $(ALL_TARGETS)
 
 .PHONY: all test clean

@@ -28,16 +28,31 @@
 
 ---
 
-# Phase 3: pane-vmm - Firecracker Backend
+# Phase 3: pane-vmm - Firecracker Backend ✓
 
 ## MicroVM Configuration
-- [ ] Implement Direct Kernel Boot mechanism (loading vmlinux/ELF 64-bit kernel directly into memory)
-- [ ] Configure standard 64-bit flat memory mode registers (CS, DS, SS, ES, FS, GS, CR0, CR4, EFER, etc.)
-- [ ] Strip all legacy PC devices (no PIT, no PIC, no ACPI, no Floppy, etc.)
-- [ ] Implement zero-configuration boot (pass zeroed boot parameters / command line directly)
+- [x] Implement Direct Kernel Boot mechanism (loading vmlinux/ELF 64-bit kernel directly into memory)
+- [x] Configure standard 64-bit flat memory mode registers (CS, DS, SS, ES, FS, GS, CR0, CR4, EFER, etc.)
+- [x] Strip all legacy PC devices (no PIT, no PIC, no ACPI, no Floppy, etc.)
+- [x] Implement zero-configuration boot (pass zeroed boot parameters / command line directly)
 
 ## Performance & Benchmarking
-- [ ] Implement high-resolution execution timing framework using `clock_gettime(CLOCK_MONOTONIC)`
-- [ ] Profile initialization vs guest execution time
-- [ ] Optimize memory mapping and vCPU initialization path
-- [ ] Benchmark and verify boot time < 5ms (P99)
+- [x] Implement high-resolution execution timing framework using `clock_gettime(CLOCK_MONOTONIC)`
+- [x] Profile initialization vs guest execution time
+- [x] Optimize memory mapping and vCPU initialization path
+- [x] Benchmark and verify boot time < 5ms (P99)
+
+---
+
+# Phase 4: pane-vmm - QEMU Backend
+
+## QEMU Backend Setup
+- [ ] Implement QEMU configuration template (enabling full hardware emulation, multi-vCPU, standard BIOS/UEFI)
+- [ ] Configure PCI/PCIE bus layout and map standard devices (IDE/SATA, VGA/GOP display, Keyboard/Mouse)
+- [ ] Implement QMP (QEMU Machine Protocol) socket listener and parser
+- [ ] Implement QMP command envelope for VM state management (suspend, resume, query status)
+
+## Guest OS Boot & Testing
+- [ ] Configure standard boot arguments for Windows (Tiny10) / Linux full installation images
+- [ ] Verify successful boot of a Tiny10 Windows image
+- [ ] Benchmark and verify boot time is < 3 seconds

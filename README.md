@@ -109,8 +109,8 @@ fd leak after 1000 VMs           = 0       absolute
 ```
 Phase 1  ██████████  VM creation & destruction   ✅ DONE  (1000 VM FD-leak test passes)
 Phase 2  ██████████  Memory mapping & virtio      ✅ DONE  (bare-metal boot, serial I/O)
-Phase 3  ░░░░░░░░░░  Firecracker backend          🔨 NEXT  (target: < 5ms spawn)
-Phase 4  ░░░░░░░░░░  QEMU backend                 📋 planned
+Phase 3  ██████████  Firecracker backend          ✅ DONE  (target: < 5ms spawn, got 1.04ms)
+Phase 4  ░░░░░░░░░░  QEMU backend                 🔨 NEXT  (target: < 3s Windows boot)
 Phase 5  ░░░░░░░░░░  io_uring disk layer           📋 planned
 Phase 6+ ░░░░░░░░░░  pane-core (Rust FFI + FSM)   📋 planned
 ```
@@ -119,6 +119,8 @@ Phase 6+ ░░░░░░░░░░  pane-core (Rust FFI + FSM)   📋 plann
 
 - **Zero-leak VM lifecycle** — create and destroy 1,000 KVM VMs with no file descriptor or memory leaks
 - **Guest memory mapping** — map anonymous host memory into guest physical address space with alignment validation (4K / 2MB / 1GB huge pages)
+- **Direct 64-Bit Long Mode Boot (Firecracker mode)** — configures segment registers, 64-bit GDT, and 4-level identity page tables in C, bypassing 16/32-bit transitions entirely
+- **Ultra-low cold-start latency** — boots a 64-bit guest payload, verifies Virtio-MMIO, and exits in **1.045 ms** (well under the 5 ms target budget)
 - **SIGALRM watchdog** — a safety net that interrupts any blocking `KVM_RUN` ioctl if the guest hangs, preventing the host from getting stuck
 - **Exit signal port** (`0x3f9`) — reliable guest-to-host VM termination that works even with an in-kernel IRQ chip
 - **Virtio-MMIO v2 console** — full emulated register map, TX queue processing, and host-side IRQ injection

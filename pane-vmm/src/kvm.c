@@ -168,6 +168,13 @@ int pane_vm_get_vm_fd(const pane_vm_t *vm) {
     return vm->vm_fd;
 }
 
+int pane_vm_get_vcpu_fd(const pane_vm_t *vm, uint32_t vcpu_id) {
+    if (!vm || vcpu_id >= PANE_VMM_MAX_VCPUS) {
+        return -EINVAL;
+    }
+    return vm->vcpus[vcpu_id].fd;
+}
+
 int pane_vm_init_irqchip(pane_vm_t *vm) {
     if (!vm) {
         return -EINVAL;

@@ -65,6 +65,14 @@ int pane_vm_vcpu_get_sregs(const pane_vm_t *vm, uint32_t vcpu_id, struct kvm_sre
 // Returns 0 on success, negative errno on failure.
 int pane_vm_vcpu_run(pane_vm_t *vm, uint32_t vcpu_id);
 
+// Get the vCPU file descriptor.
+// Returns fd on success, negative errno on failure.
+int pane_vm_get_vcpu_fd(const pane_vm_t *vm, uint32_t vcpu_id);
+
+// Configure the VM for direct 64-bit boot (Firecracker Mode), mapping GDT and 4-level identity page tables.
+// Returns 0 on success, negative errno on failure.
+int pane_vm_setup_firecracker_mode(pane_vm_t *vm, uint32_t vcpu_id, uint64_t entry_point);
+
 // Set up a virtio-mmio console device at the specified physical address range and IRQ.
 // Returns 0 on success, negative errno on failure.
 int pane_vm_setup_virtio_mmio(pane_vm_t *vm, uint64_t base_addr, uint64_t size, int irq);
