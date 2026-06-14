@@ -4,10 +4,11 @@ package ffi
 #cgo LDFLAGS: -L../../pane-core/target/debug -L../../pane-core/target/release -L../../pane-vmm -lpane_core -lpane_vmm -luring -ldl -lpthread -lm
 #include <stdint.h>
 #include <stdlib.h>
+#include "../../pane-vmm/include/pane_vmm.h"
 
 typedef int (*extern_callback_t)(const uint8_t* data, size_t len, int is_stderr, int exit_code, void* user_data);
 
-int pane_core_spawn(const char* id, const char* kernel, const char* rootfs, uint32_t vcpu, uint32_t mem, const char* boot_args, uint32_t* cid_out, uint32_t* pid_out);
+int pane_core_spawn(const char* id, const pane_vmm_config_t* config, uint32_t* cid_out, uint32_t* pid_out);
 int pane_core_snapshot(const char* id, const char* snap_path, const char* mem_path);
 int pane_core_fork(const char* id, const char* snapshot_path, const char* mem_path, const char* new_rootfs, uint32_t new_cid, uint32_t* pid_out);
 int pane_core_destroy(const char* id);
@@ -21,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"pane/pane-api/panespec"
 	"runtime/cgo"
 	"syscall"
 	"unsafe"
@@ -35,25 +37,98 @@ func checkErr(code C.int, context string) error {
 	return nil
 }
 
-// Spawn boots a VM via Rust orchestration FFI
-func Spawn(id, kernel, rootfs, bootArgs string, vcpu, mem uint32) (uint32, uint32, error) {
+// Spawn boots a VM via Rust orchestration FFI using the validated PaneSpec
+func Spawn(id string, spec *panespec.PaneSpec) (uint32, uint32, error) {
 	cId := C.CString(id)
 	defer C.free(unsafe.Pointer(cId))
-	cKernel := C.CString(kernel)
-	defer C.free(unsafe.Pointer(cKernel))
-	cRootfs := C.CString(rootfs)
-	defer C.free(unsafe.Pointer(cRootfs))
 
-	var cBootArgs *C.char
-	if bootArgs != "" {
-		cBootArgs = C.CString(bootArgs)
-		defer C.free(unsafe.Pointer(cBootArgs))
+	// Construct C.pane_vmm_config_t
+	var cfg C.pane_vmm_config_t
+
+	cfg.vm_id = C.CString(id)
+	defer C.free(unsafe.Pointer(cfg.vm_id))
+
+	vmmType := "firecracker"
+	if spec.VMM != nil {
+		vmmType = string(*spec.VMM)
+	}
+	cfg.vmm_type = C.CString(vmmType)
+	defer C.free(unsafe.Pointer(cfg.vmm_type))
+
+	vcpus := uint32(1)
+	if spec.CPUs != nil {
+		vcpus = *spec.CPUs
+	}
+	cfg.vcpus = C.uint32_t(vcpus)
+
+	memBytes := uint64(128 * 1024 * 1024) // 128 MiB default
+	if spec.Memory != nil {
+		if val, err := panespec.ParseSize(*spec.Memory); err == nil {
+			memBytes = val
+		}
+	}
+	cfg.memory_bytes = C.uint64_t(memBytes)
+
+	if spec.Disk != nil && spec.Disk.Path != nil {
+		cfg.disk_path = C.CString(*spec.Disk.Path)
+		defer C.free(unsafe.Pointer(cfg.disk_path))
+	}
+
+	if spec.Disk != nil && spec.Disk.Format != nil {
+		cfg.disk_format = C.CString(string(*spec.Disk.Format))
+		defer C.free(unsafe.Pointer(cfg.disk_format))
+	}
+
+	if spec.Drivers != nil {
+		if spec.Drivers.VirtioNet != nil {
+			cfg.virtio_net = C.bool(*spec.Drivers.VirtioNet)
+		}
+		if spec.Drivers.VirtioBlk != nil {
+			cfg.virtio_blk = C.bool(*spec.Drivers.VirtioBlk)
+		}
+		if spec.Drivers.VirtioRng != nil {
+			cfg.virtio_rng = C.bool(*spec.Drivers.VirtioRng)
+		}
+	}
+
+	if spec.Network != nil && spec.Network.Bridge != nil {
+		cfg.net_bridge = C.CString(*spec.Network.Bridge)
+		defer C.free(unsafe.Pointer(cfg.net_bridge))
+	}
+
+	if spec.Kernel != nil {
+		cfg.kernel_path = C.CString(*spec.Kernel)
+		defer C.free(unsafe.Pointer(cfg.kernel_path))
+	}
+
+	if spec.Cmdline != nil {
+		cfg.cmdline = C.CString(*spec.Cmdline)
+		defer C.free(unsafe.Pointer(cfg.cmdline))
+	}
+
+	// extra_args: slice of CStrings
+	var cExtraArgs []*C.char
+	if len(spec.ExtraArgs) > 0 {
+		for _, arg := range spec.ExtraArgs {
+			cExtraArgs = append(cExtraArgs, C.CString(arg))
+		}
+		cExtraArgs = append(cExtraArgs, nil) // Null terminator
+		cfg.extra_args = (**C.char)(unsafe.Pointer(&cExtraArgs[0]))
+
+		// Defer freeing of extra args
+		defer func() {
+			for _, arg := range cExtraArgs {
+				if arg != nil {
+					C.free(unsafe.Pointer(arg))
+				}
+			}
+		}()
 	}
 
 	var cid C.uint32_t
 	var pid C.uint32_t
 
-	ret := C.pane_core_spawn(cId, cKernel, cRootfs, C.uint32_t(vcpu), C.uint32_t(mem), cBootArgs, &cid, &pid)
+	ret := C.pane_core_spawn(cId, &cfg, &cid, &pid)
 	if err := checkErr(ret, "Spawn"); err != nil {
 		return 0, 0, err
 	}

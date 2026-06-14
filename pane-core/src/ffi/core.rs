@@ -2,6 +2,8 @@ use crate::backends::{BootSource, Drive, MachineConfig};
 use crate::error::PaneError;
 use crate::exec::ExecChunk;
 use crate::vm::{Running, Spawning, Vm};
+use crate::ffi::vmm::pane_vmm_config_t;
+use crate::ffi::SafeVm;
 use std::ffi::CStr;
 use tokio::runtime::Runtime;
 
@@ -28,15 +30,11 @@ fn error_to_errno(err: PaneError) -> libc::c_int {
 #[no_mangle]
 pub unsafe extern "C" fn pane_core_spawn(
     id: *const libc::c_char,
-    kernel_path: *const libc::c_char,
-    rootfs_path: *const libc::c_char,
-    vcpu_count: u32,
-    mem_size_mib: u32,
-    boot_args: *const libc::c_char,
+    config: *const pane_vmm_config_t,
     cid_out: *mut u32,
     pid_out: *mut u32,
 ) -> libc::c_int {
-    if id.is_null() || kernel_path.is_null() || rootfs_path.is_null() {
+    if id.is_null() || config.is_null() {
         return -libc::EINVAL;
     }
 
@@ -45,83 +43,140 @@ pub unsafe extern "C" fn pane_core_spawn(
         Err(_) => return -libc::ENOMEM,
     };
 
+    let cfg = &*config;
+
     rt.block_on(async {
         let id_str = match CStr::from_ptr(id).to_str() {
             Ok(s) => s,
             Err(_) => return -libc::EINVAL,
         };
-        let kernel_str = match CStr::from_ptr(kernel_path).to_str() {
-            Ok(s) => s,
-            Err(_) => return -libc::EINVAL,
-        };
-        let rootfs_str = match CStr::from_ptr(rootfs_path).to_str() {
-            Ok(s) => s,
-            Err(_) => return -libc::EINVAL,
-        };
-        let boot_args_str = if boot_args.is_null() {
-            None
+
+        let vmm_type_str = if cfg.vmm_type.is_null() {
+            "firecracker"
         } else {
-            match CStr::from_ptr(boot_args).to_str() {
-                Ok(s) => Some(s.to_string()),
-                Err(_) => return -libc::EINVAL,
+            match CStr::from_ptr(cfg.vmm_type).to_str() {
+                Ok(s) => s,
+                Err(_) => "firecracker",
             }
         };
 
-        let mut vm = Vm::new_firecracker(id_str);
-        if let Err(e) = vm.spawn().await {
-            return error_to_errno(e);
+        if vmm_type_str == "qemu" {
+            // Spawn QEMU backend
+            let safe_vm = match SafeVm::create() {
+                Ok(vm) => vm,
+                Err(e) => return error_to_errno(e),
+            };
+
+            let qmp_socket_path = format!("/run/pane/qmp-{}.sock", id_str);
+            let qmp_path = std::path::Path::new(&qmp_socket_path);
+            if let Some(parent) = qmp_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+
+            if let Err(e) = safe_vm.setup_qemu_mode(config, &qmp_socket_path) {
+                return error_to_errno(e);
+            }
+
+            let vm = Vm::new_native(id_str, safe_vm);
+            let running_vm = match vm.start().await {
+                Ok(r) => r,
+                Err(e) => return error_to_errno(e),
+            };
+
+            if !cid_out.is_null() {
+                *cid_out = running_vm.vsock_cid();
+            }
+            if !pid_out.is_null() {
+                *pid_out = running_vm.pid().unwrap_or(0);
+            }
+
+            std::mem::forget(running_vm);
+            0
+        } else {
+            // Spawn Firecracker backend
+            let kernel_str = if cfg.kernel_path.is_null() {
+                ""
+            } else {
+                match CStr::from_ptr(cfg.kernel_path).to_str() {
+                    Ok(s) => s,
+                    Err(_) => return -libc::EINVAL,
+                }
+            };
+            let disk_str = if cfg.disk_path.is_null() {
+                ""
+            } else {
+                match CStr::from_ptr(cfg.disk_path).to_str() {
+                    Ok(s) => s,
+                    Err(_) => return -libc::EINVAL,
+                }
+            };
+            let boot_args_str = if cfg.cmdline.is_null() {
+                None
+            } else {
+                match CStr::from_ptr(cfg.cmdline).to_str() {
+                    Ok(s) => Some(s.to_string()),
+                    Err(_) => return -libc::EINVAL,
+                }
+            };
+
+            let mut vm = Vm::new_firecracker(id_str);
+            if let Err(e) = vm.spawn().await {
+                return error_to_errno(e);
+            }
+
+            let machine_config = MachineConfig {
+                vcpu_count: cfg.vcpus,
+                mem_size_mib: (cfg.memory_bytes / (1024 * 1024)) as u32,
+                smt: Some(false),
+                track_dirty_pages: Some(true),
+            };
+            if let Err(e) = vm.configure_machine(&machine_config).await {
+                return error_to_errno(e);
+            }
+
+            if !kernel_str.is_empty() {
+                let boot_source = BootSource {
+                    kernel_image_path: kernel_str.to_string(),
+                    boot_args: boot_args_str,
+                };
+                if let Err(e) = vm.configure_boot_source(&boot_source).await {
+                    return error_to_errno(e);
+                }
+            }
+
+            if !disk_str.is_empty() {
+                let drive = Drive {
+                    drive_id: "rootfs".to_string(),
+                    path_on_host: disk_str.to_string(),
+                    is_root_device: true,
+                    is_read_only: false,
+                };
+                if let Err(e) = vm.configure_drive(&drive).await {
+                    return error_to_errno(e);
+                }
+            }
+
+            // Configure a default guest CID (3)
+            let guest_cid = 3;
+            if let Err(e) = vm.configure_vsock(guest_cid).await {
+                return error_to_errno(e);
+            }
+
+            let running_vm = match vm.start().await {
+                Ok(r) => r,
+                Err(e) => return error_to_errno(e),
+            };
+
+            if !cid_out.is_null() {
+                *cid_out = running_vm.vsock_cid();
+            }
+            if !pid_out.is_null() {
+                *pid_out = running_vm.pid().unwrap_or(0);
+            }
+
+            std::mem::forget(running_vm);
+            0
         }
-
-        let machine_config = MachineConfig {
-            vcpu_count,
-            mem_size_mib,
-            smt: Some(false),
-            track_dirty_pages: Some(true),
-        };
-        if let Err(e) = vm.configure_machine(&machine_config).await {
-            return error_to_errno(e);
-        }
-
-        let boot_source = BootSource {
-            kernel_image_path: kernel_str.to_string(),
-            boot_args: boot_args_str,
-        };
-        if let Err(e) = vm.configure_boot_source(&boot_source).await {
-            return error_to_errno(e);
-        }
-
-        let drive = Drive {
-            drive_id: "rootfs".to_string(),
-            path_on_host: rootfs_str.to_string(),
-            is_root_device: true,
-            is_read_only: false,
-        };
-        if let Err(e) = vm.configure_drive(&drive).await {
-            return error_to_errno(e);
-        }
-
-        // Configure a default guest CID (3)
-        let guest_cid = 3;
-        if let Err(e) = vm.configure_vsock(guest_cid).await {
-            return error_to_errno(e);
-        }
-
-        let running_vm = match vm.start().await {
-            Ok(r) => r,
-            Err(e) => return error_to_errno(e),
-        };
-
-        if !cid_out.is_null() {
-            *cid_out = running_vm.vsock_cid();
-        }
-        if !pid_out.is_null() {
-            *pid_out = running_vm.pid().unwrap_or(0);
-        }
-
-        // Persist the microVM state in the background
-        std::mem::forget(running_vm);
-
-        0
     })
 }
 

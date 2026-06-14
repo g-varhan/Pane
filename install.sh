@@ -66,11 +66,9 @@ cd pane-core
 cargo build --release
 cd ..
 
-# 4. Build Go gRPC Server Daemon
-echo "${BLUE}Building pane-api daemon...${NC}"
-cd pane-api
-CGO_ENABLED=1 go build -ldflags="-s -w" -o pane-api main.go
-cd ..
+# 4. Build Go Unified CLI
+echo "${BLUE}Building pane unified CLI...${NC}"
+CGO_ENABLED=1 go build -ldflags="-s -w" -o pane pane-cli/main.go
 
 # 5. Installing Binaries and Libraries
 echo "${BLUE}Installing Pane to system directories...${NC}"
@@ -78,15 +76,15 @@ $SUDO mkdir -p /usr/local/bin
 $SUDO mkdir -p /usr/local/include
 $SUDO mkdir -p /usr/local/lib
 
-$SUDO cp pane-api/pane-api /usr/local/bin/pane-api
+$SUDO cp pane /usr/local/bin/pane
 $SUDO cp pane-vmm/include/pane_vmm.h /usr/local/include/pane_vmm.h
 $SUDO cp pane-vmm/libpane_vmm.a /usr/local/lib/libpane_vmm.a
 
 # Clean up
 rm -rf "$BUILD_DIR"
 
-echo "${GREEN}${BOLD}✓ Pane v0.1.0 installed successfully!${NC}"
+echo "${GREEN}${BOLD}✓ Pane v0.2.0 installed successfully!${NC}"
 echo "To start the Pane gRPC daemon, run:"
-echo "  ${BOLD}pane-api${NC}"
+echo "  ${BOLD}pane daemon start${NC}"
 echo ""
 echo "For tutorials and guides, see: https://github.com/g-varhan/Pane/blob/main/getstarted.md"

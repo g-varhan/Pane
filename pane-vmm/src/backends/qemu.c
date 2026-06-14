@@ -11,6 +11,123 @@
 #include <errno.h>
 #include <fcntl.h>
 
+// Dynamic argv builder structure
+typedef struct {
+    char **argv;
+    int argc;
+    int capacity;
+} qemu_argv_t;
+
+static qemu_argv_t *qemu_argv_new(void) {
+    qemu_argv_t *qa = malloc(sizeof(qemu_argv_t));
+    if (!qa) return NULL;
+    qa->argc = 0;
+    qa->capacity = 16;
+    qa->argv = malloc(sizeof(char*) * qa->capacity);
+    if (!qa->argv) {
+        free(qa);
+        return NULL;
+    }
+    qa->argv[0] = NULL;
+    return qa;
+}
+
+static void qemu_argv_push(qemu_argv_t *qa, const char *arg) {
+    if (!qa || !arg) return;
+    if (qa->argc >= qa->capacity - 2) {
+        qa->capacity *= 2;
+        char **new_argv = realloc(qa->argv, sizeof(char*) * qa->capacity);
+        if (!new_argv) return;
+        qa->argv = new_argv;
+    }
+    qa->argv[qa->argc++] = strdup(arg);
+    qa->argv[qa->argc] = NULL;
+}
+
+static void qemu_argv_free(qemu_argv_t *qa) {
+    if (!qa) return;
+    for (int i = 0; i < qa->argc; i++) {
+        free(qa->argv[i]);
+    }
+    free(qa->argv);
+    free(qa);
+}
+
+// Helpers for composition
+static void qemu_args_add_machine(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    (void)cfg;
+    qemu_argv_push(qa, "qemu-system-x86_64");
+    qemu_argv_push(qa, "-enable-kvm");
+}
+
+static void qemu_args_add_cpu_mem(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    char mem_str[64];
+    uint64_t mib = cfg->memory_bytes / (1024 * 1024);
+    if (mib == 0) mib = 128; // default
+    snprintf(mem_str, sizeof(mem_str), "%lu", mib);
+    qemu_argv_push(qa, "-m");
+    qemu_argv_push(qa, mem_str);
+
+    char cpu_str[64];
+    uint32_t cpus = cfg->vcpus;
+    if (cpus == 0) cpus = 1;
+    snprintf(cpu_str, sizeof(cpu_str), "%u", cpus);
+    qemu_argv_push(qa, "-smp");
+    qemu_argv_push(qa, cpu_str);
+}
+
+static void qemu_args_add_disk(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    if (cfg->disk_path && strlen(cfg->disk_path) > 0) {
+        const char *fmt = cfg->disk_format ? cfg->disk_format : "raw";
+        char drive_arg[1024];
+        snprintf(drive_arg, sizeof(drive_arg), "file=%s,format=%s,if=virtio", cfg->disk_path, fmt);
+        qemu_argv_push(qa, "-drive");
+        qemu_argv_push(qa, drive_arg);
+    }
+}
+
+static void qemu_args_add_net(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    if (cfg->virtio_net) {
+        const char *vm_id = cfg->vm_id ? cfg->vm_id : "default";
+        char netdev_arg[1024];
+        if (cfg->net_bridge && strlen(cfg->net_bridge) > 0) {
+            snprintf(netdev_arg, sizeof(netdev_arg), "bridge,id=net0,br=%s", cfg->net_bridge);
+        } else {
+            snprintf(netdev_arg, sizeof(netdev_arg), "tap,id=net0,ifname=pane-%s-tap0,script=no,downscript=no", vm_id);
+        }
+        qemu_argv_push(qa, "-netdev");
+        qemu_argv_push(qa, netdev_arg);
+        qemu_argv_push(qa, "-device");
+        qemu_argv_push(qa, "virtio-net-pci,netdev=net0");
+    }
+}
+
+static void qemu_args_add_rng(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    if (cfg->virtio_rng) {
+        qemu_argv_push(qa, "-device");
+        qemu_argv_push(qa, "virtio-rng-pci");
+    }
+}
+
+static void qemu_args_add_kernel(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    if (cfg->kernel_path && strlen(cfg->kernel_path) > 0) {
+        qemu_argv_push(qa, "-kernel");
+        qemu_argv_push(qa, cfg->kernel_path);
+        if (cfg->cmdline && strlen(cfg->cmdline) > 0) {
+            qemu_argv_push(qa, "-append");
+            qemu_argv_push(qa, cfg->cmdline);
+        }
+    }
+}
+
+static void qemu_args_add_extra(qemu_argv_t *qa, const pane_vmm_config_t *cfg) {
+    if (cfg->extra_args) {
+        for (int i = 0; cfg->extra_args[i] != NULL; i++) {
+            qemu_argv_push(qa, cfg->extra_args[i]);
+        }
+    }
+}
+
 static int send_qmp_cmd(int fd, const char *cmd, char *resp_out, size_t max_len) {
     ssize_t len = write(fd, cmd, strlen(cmd));
     if (len < 0) return -errno;
@@ -30,7 +147,7 @@ static int send_qmp_cmd(int fd, const char *cmd, char *resp_out, size_t max_len)
         }
         resp_out[total] = '\0';
 
-        // If this is an asynchronous event (e.g. {"event":"STOP"}), skip it and wait for command response
+        // Skip asynchronous events
         if (strstr(resp_out, "\"event\":") == NULL) {
             break;
         }
@@ -55,8 +172,8 @@ static int read_qmp_greeting(int fd, char *buf, size_t max_len) {
     return 0;
 }
 
-int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *qmp_socket_path) {
-    if (!vm || !image_path || !qmp_socket_path) return -EINVAL;
+int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, const char *qmp_socket_path) {
+    if (!vm || !config || !qmp_socket_path) return -EINVAL;
 
     // Transition backend type
     vm->backend = PANE_BACKEND_QEMU;
@@ -72,53 +189,51 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *q
         vm->kvm_fd = -1;
     }
 
+    // Build the dynamic QEMU command line
+    qemu_argv_t *qa = qemu_argv_new();
+    if (!qa) return -ENOMEM;
+
+    qemu_args_add_machine(qa, config);
+    qemu_args_add_cpu_mem(qa, config);
+    qemu_args_add_disk(qa, config);
+    qemu_args_add_net(qa, config);
+    qemu_args_add_rng(qa, config);
+    qemu_args_add_kernel(qa, config);
+    
+    // Add QMP Socket argument
+    char qmp_arg[1024];
+    snprintf(qmp_arg, sizeof(qmp_arg), "unix:%s,server,nowait", qmp_socket_path);
+    qemu_argv_push(qa, "-qmp");
+    qemu_argv_push(qa, qmp_arg);
+
+    qemu_args_add_extra(qa, config);
+
     // Fork and execute qemu
     pid_t pid = fork();
     if (pid < 0) {
+        qemu_argv_free(qa);
         return -errno;
     }
 
     if (pid == 0) {
         // Child process: execute QEMU
-        char *args[] = {
-            "qemu-system-x86_64",
-            "-enable-kvm",
-            "-m", "128",
-            "-smp", "1",
-            "-display", "none",
-            "-nographic",
-            "-drive", NULL, // Will format below
-            "-qmp", NULL,   // Will format below
-            "-serial", "none",
-            NULL
-        };
-
-        // Formats
-        char drive_arg[512];
-        snprintf(drive_arg, sizeof(drive_arg), "file=%s,format=raw,if=virtio", image_path);
-        args[10] = drive_arg;
-
-        char qmp_arg[512];
-        snprintf(qmp_arg, sizeof(qmp_arg), "unix:%s,server,nowait", qmp_socket_path);
-        args[12] = qmp_arg;
-
-        execvp("qemu-system-x86_64", args);
-        // If execvp returns, it failed
+        execvp("qemu-system-x86_64", qa->argv);
         perror("execvp qemu-system-x86_64");
         exit(1);
     }
 
     // Parent process
+    qemu_argv_free(qa);
     vm->qemu_pid = pid;
 
-    // Connect to QMP Unix socket with retries (allow QEMU to initialize socket listener)
+    // Connect to QMP Unix socket
     int client_fd = -1;
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, qmp_socket_path, sizeof(addr.sun_path) - 1);
 
-    int retries = 40; // 40 * 50ms = 2 seconds max startup time
+    int retries = 40;
     while (retries > 0) {
         client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (client_fd < 0) {
@@ -126,12 +241,12 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *q
         }
 
         if (connect(client_fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
-            break; // Connected!
+            break;
         }
 
         close(client_fd);
         client_fd = -1;
-        usleep(50000); // Wait 50ms
+        usleep(50000);
         retries--;
     }
 
@@ -144,7 +259,6 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *q
 
     vm->qmp_fd = client_fd;
 
-    // Read greeting
     char buf[1024];
     int ret = read_qmp_greeting(client_fd, buf, sizeof(buf));
     if (ret < 0) {
@@ -153,7 +267,6 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *q
         return ret;
     }
 
-    // Perform capabilities handshake
     ret = send_qmp_cmd(client_fd, "{\"execute\":\"qmp_capabilities\"}\n", buf, sizeof(buf));
     if (ret < 0) {
         close(client_fd);
@@ -161,7 +274,6 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *q
         return ret;
     }
 
-    // Verify response
     if (strstr(buf, "\"return\"") == NULL) {
         fprintf(stderr, "QMP handshake failed, got: %s\n", buf);
         close(client_fd);

@@ -16,6 +16,24 @@ pub enum pane_backend_t {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone)]
+pub struct pane_vmm_config_t {
+    pub vm_id: *const libc::c_char,
+    pub vmm_type: *const libc::c_char,
+    pub vcpus: u32,
+    pub memory_bytes: u64,
+    pub disk_path: *const libc::c_char,
+    pub disk_format: *const libc::c_char,
+    pub virtio_net: bool,
+    pub virtio_blk: bool,
+    pub virtio_rng: bool,
+    pub net_bridge: *const libc::c_char,
+    pub kernel_path: *const libc::c_char,
+    pub cmdline: *const libc::c_char,
+    pub extra_args: *const *const libc::c_char,
+}
+
+#[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct kvm_regs {
     pub rax: u64,
@@ -138,7 +156,7 @@ extern "C" {
     fn pane_vm_get_backend(vm: *const pane_vm) -> pane_backend_t;
     fn pane_vm_setup_qemu_mode(
         vm: *mut pane_vm,
-        image_path: *const libc::c_char,
+        config: *const pane_vmm_config_t,
         qmp_socket_path: *const libc::c_char,
     ) -> libc::c_int;
     fn pane_vm_qemu_suspend(vm: *mut pane_vm) -> libc::c_int;
@@ -324,13 +342,11 @@ impl SafeVm {
     }
 
     /// Configures the VM for QEMU mode, spawning QEMU with KVM acceleration and QMP.
-    pub fn setup_qemu_mode(&self, image_path: &str, qmp_socket_path: &str) -> Result<()> {
-        let c_img = CString::new(image_path)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    pub fn setup_qemu_mode(&self, config: *const pane_vmm_config_t, qmp_socket_path: &str) -> Result<()> {
         let c_qmp = CString::new(qmp_socket_path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         // SAFETY: The raw pointer is valid, and C strings are null-terminated.
-        let ret = unsafe { pane_vm_setup_qemu_mode(self.raw, c_img.as_ptr(), c_qmp.as_ptr()) };
+        let ret = unsafe { pane_vm_setup_qemu_mode(self.raw, config, c_qmp.as_ptr()) };
         check_ffi(ret, "Set up QEMU mode")?;
         Ok(())
     }

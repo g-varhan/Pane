@@ -33,7 +33,22 @@ int main() {
 
     printf("Setting up QEMU mode...\n");
     const char *qmp_path = "test_qmp.sock";
-    ret = pane_vm_setup_qemu_mode(vm, img_path, qmp_path);
+    pane_vmm_config_t config = {
+        .vm_id = "test-vm",
+        .vmm_type = "qemu",
+        .vcpus = 1,
+        .memory_bytes = 128 * 1024 * 1024,
+        .disk_path = img_path,
+        .disk_format = "raw",
+        .virtio_net = false,
+        .virtio_blk = true,
+        .virtio_rng = false,
+        .net_bridge = NULL,
+        .kernel_path = NULL,
+        .cmdline = NULL,
+        .extra_args = NULL
+    };
+    ret = pane_vm_setup_qemu_mode(vm, &config, qmp_path);
     if (ret != 0) {
         fprintf(stderr, "pane_vm_setup_qemu_mode failed: %s\n", strerror(-ret));
         pane_vm_destroy(vm);

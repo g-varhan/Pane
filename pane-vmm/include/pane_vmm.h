@@ -20,6 +20,23 @@ typedef enum {
     PANE_BACKEND_QEMU
 } pane_backend_t;
 
+// VM Configuration Struct
+typedef struct {
+    const char *vm_id;
+    const char *vmm_type;
+    uint32_t vcpus;
+    uint64_t memory_bytes;
+    const char *disk_path;
+    const char *disk_format;     /* "qcow2" | "raw" */
+    bool virtio_net;
+    bool virtio_blk;
+    bool virtio_rng;
+    const char *net_bridge;      /* may be NULL */
+    const char *kernel_path;     /* may be NULL for direct-kernel-boot */
+    const char *cmdline;         /* may be NULL */
+    const char **extra_args;     /* NULL-terminated argv-style passthrough */
+} pane_vmm_config_t;
+
 // Create a new VM.
 // Returns 0 on success, negative errno on failure.
 // The caller owns the returned pointer and must call pane_vm_destroy when done.
@@ -96,7 +113,7 @@ pane_backend_t pane_vm_get_backend(const pane_vm_t *vm);
 
 // Configure the VM for QEMU mode, spawning QEMU with KVM acceleration and QMP socket.
 // Returns 0 on success, negative errno on failure.
-int pane_vm_setup_qemu_mode(pane_vm_t *vm, const char *image_path, const char *qmp_socket_path);
+int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, const char *qmp_socket_path);
 
 // Suspend a QEMU VM.
 // Returns 0 on success, negative errno on failure.

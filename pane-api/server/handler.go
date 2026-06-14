@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 
 	"pane/pane-api/ffi"
+	"pane/pane-api/panespec"
 	pb "pane/pane-api/proto"
 
 	"google.golang.org/grpc"
@@ -25,7 +27,19 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 		return nil, status.Error(codes.InvalidArgument, "id, kernel_path, and rootfs_path cannot be empty")
 	}
 
-	cid, pid, err := ffi.Spawn(req.Id, req.KernelPath, req.RootfsPath, req.BootArgs, req.VcpuCount, req.MemSizeMib)
+	spec := &panespec.PaneSpec{
+		VMM:    panespec.PtrVMMType(panespec.VMMFirecracker),
+		CPUs:   panespec.PtrUint32(req.VcpuCount),
+		Memory: panespec.PtrString(fmt.Sprintf("%dMiB", req.MemSizeMib)),
+		Disk: &panespec.DiskConfig{
+			Path:   panespec.PtrString(req.RootfsPath),
+			Format: panespec.PtrDiskFormat(panespec.FormatRaw),
+		},
+		Kernel:  panespec.PtrString(req.KernelPath),
+		Cmdline: panespec.PtrString(req.BootArgs),
+	}
+
+	cid, pid, err := ffi.Spawn(req.Id, spec)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to spawn VM: %v", err)
 	}
@@ -155,6 +169,30 @@ func StartGrpcServer(port int) (*grpc.Server, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on port %d: %w", port, err)
+	}
+
+	grpcServer := grpc.NewServer()
+	pb.RegisterPaneServiceServer(grpcServer, &PaneServer{})
+
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			fmt.Printf("gRPC server error: %v\n", err)
+		}
+	}()
+
+	return grpcServer, nil
+}
+
+// StartGrpcServerUnix runs the gRPC listener on the specified UNIX domain socket path
+func StartGrpcServerUnix(socketPath string) (*grpc.Server, error) {
+	// Clean up stale socket file if it exists
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to remove stale socket: %w", err)
+	}
+
+	lis, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on unix socket %s: %w", socketPath, err)
 	}
 
 	grpcServer := grpc.NewServer()

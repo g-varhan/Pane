@@ -26,4 +26,6 @@ pane-vmm/libpane_vmm.a
 # Agent binaries
 pane-agent
 pane-core/pane-agent
+pane
+pane-api/pane-api
 
