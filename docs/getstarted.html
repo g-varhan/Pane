@@ -380,8 +380,8 @@ import (
 )
 
 func main() {
-	// 1. Connect to the Pane gRPC daemon
-	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 1. Connect to the Pane gRPC daemon UNIX socket
+	conn, err := grpc.Dial("unix:///run/pane.sock", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
@@ -442,59 +442,38 @@ func main() {
 
       <p>Pane's default <code>Spawning</code> state leverages Firecracker for speed, but the C-layer hypervisor <code>pane-vmm</code> contains a fully functional <strong>QEMU Backend</strong> designed to run custom ISOs, full operating systems (like Ubuntu Server), or Windows.</p>
 
-      <p>Under the hood, the QEMU backend instantiates a standard PCI bus layout with virtual drivers suitable for full hardware emulation.</p>
+      <p>In Pane v0.2, you no longer need to modify C code or recompile the hypervisor to configure QEMU. A robust config builder compiles the QEMU argv string dynamically based on CLI flags, yaml configuration files, or cached image metadata.</p>
 
-      <h3>The QEMU Invocation</h3>
-      <p>When you transition a VM to QEMU mode in <code>pane-vmm</code> via <a href="file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c#L58-L110">pane_vm_setup_qemu_mode</a>, it spawns:</p>
+      <h3>Step 1: Register and Cache your ISO</h3>
+      <p>Place your ISO image and any drivers (like VirtIO drivers for Windows) in the local folder. Use <code>pane pull</code> to register the image in Pane's local cache:</p>
 
-      <pre><code>qemu-system-x86_64 -enable-kvm -m 128 -smp 1 -display none -nographic -drive file=&lt;image_path&gt;,format=raw,if=virtio -qmp unix:&lt;qmp_socket_path&gt;,server,nowait -serial none
+      <pre><code># Register Windows Tiny10 ISO and package it with VirtIO drivers
+pane pull tiny10
 </code></pre>
 
-      <h3>Step 1: Preparing files for Custom / Windows ISO</h3>
-      <p>Because installing Windows or running a full desktop ISO requires more resources (e.g., graphics/VNC, at least 4GB of RAM, and multiple drives), you will want to customize the QEMU command-line parameters.</p>
+      <p>This copies the ISO, configures default drivers (virtio-blk, virtio-net), and attaches the VirtIO driver CD-ROM via merged metadata.</p>
 
-      <ol>
-        <li><strong>Create a blank virtual disk image</strong> (for the OS installation destination):
-          <pre><code>qemu-img create -f qcow2 windows_install.qcow2 40G
-</code></code></pre>
-        </li>
-        <li><strong>Download the ISO</strong>: Place your Windows ISO (e.g. <code>Win10_Installer.iso</code>) or Custom Linux ISO (e.g. <code>ubuntu.iso</code>) in an accessible directory.</li>
-      </ol>
+      <h3>Step 2: Start the VM with CLI overrides</h3>
+      <p>To allocate more memory, vCPUs, or customize arguments dynamically, use the CLI flags:</p>
 
-      <h3>Step 2: Customizing the QEMU Backend in Pane</h3>
-      <p>To run heavy OS installs, open <a href="file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c#L83-L103">pane-vmm/src/backends/qemu.c</a> and customize the boot parameters to support larger memory limits, attach the ISO, and enable VNC display access:</p>
-
-      <pre><code>         char *args[] = {
-             "qemu-system-x86_64",
-             "-enable-kvm",
--            "-m", "128",
--            "-smp", "1",
--            "-display", "none",
--            "-nographic",
-+            "-m", "4096",              // Allocate 4GB RAM for Windows
-+            "-smp", "4",               // Allocate 4 vCPUs
-+            "-vnc", ":1",              // Enable VNC display on port 5901 for graphical installation
-             "-drive", NULL,            // Destination drive (customized below)
-+            "-cdrom", "/path/to/installer.iso", // ISO Installer
-             "-qmp", NULL,
-             "-serial", "none",
-             NULL
-         };
+      <pre><code># Run Windows VM with 4 vCPUs, 4GB RAM, and VNC server enabled
+pane run --name win-vm-01 --cpus 4 --memory 4GiB tiny10
 </code></pre>
 
-      <p><em>Tip: If you're running headless on a server, mapping the VNC port (<code>:1</code> translates to port <code>5901</code> on the host) allows you to connect with any standard VNC client to interact with the OS GUI installer.</em></p>
+      <p>Under the hood, Pane merges the default profile, cached <code>tiny10</code> spec, and your CLI flags to construct the correct QEMU command-line parameters:</p>
 
-      <h3>Step 3: Launching the Installation</h3>
-      <p>Compile the updated VMM library and call <code>pane_vm_setup_qemu_mode</code> passing the path to the blank destination disk:</p>
-
-      <pre><code>// Setup the VM in QEMU mode to begin the ISO installation
-err := ffi.SetupQemuMode("windows_install.qcow2", "/run/pane/qmp.sock")
-if err != nil {
-    log.Fatalf("Failed to initialize QEMU install: %v", err)
-}
+      <pre><code>qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -drive file=/var/lib/pane/images/tiny10/v1.0/disk.iso,format=raw,if=virtio -cdrom /home/varhan/Documents/disk/virtio-win-0.1.271.iso -vnc :1
 </code></pre>
 
-      <p>Once installation is finished, you can remove the <code>-cdrom</code> installer flag from <a href="file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c">qemu.c</a> and boot directly from your newly populated <code>windows_install.qcow2</code> drive.</p>
+      <p><em>Tip: You can VNC to port <code>5901</code> of the host to access the graphical installation interface.</em></p>
+
+      <h3>Step 3: Dry-Run for Debugging</h3>
+      <p>To inspect the generated argv list before spawning the VM, use the <code>--dry-run</code> flag:</p>
+
+      <pre><code>pane run --dry-run --cpus 4 --memory 4GiB tiny10
+</code></pre>
+
+      <p>This runs the entire merge precedence logic and prints the exact spec configuration and backend arguments without executing anything.</p>
     </div>
   </main>
 

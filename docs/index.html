@@ -625,9 +625,9 @@
         <div class="terminal-body" id="terminal">
           <div class="terminal-line">
             <span class="prompt-symbol">$</span>
-            <span class="cmd-text">pane-api --port 50051</span>
+            <span class="cmd-text">pane daemon start</span>
           </div>
-          <div class="output-text">Starting Pane gRPC server on port 50051...</div>
+          <div class="output-text">Starting Pane daemon on UNIX socket: /run/pane.sock</div>
         </div>
       </div>
     </section>
@@ -856,25 +856,25 @@
     // Terminal Demo simulation
     const terminal = document.getElementById('terminal');
     const demoSteps = [
-      { delay: 1000, type: 'input', cmd: 'pane-cli spawn --id web-vm-01 --kernel vmlinux --mem 512' },
-      { delay: 400, type: 'info', text: 'Connecting to pane-api daemon...' },
-      { delay: 600, type: 'success', text: 'VM booted successfully (Time: 0.83ms) | Vsock CID: 3 | PID: 12895' },
+      { delay: 1000, type: 'input', cmd: 'pane run --name web-vm-01 alpine-latest' },
+      { delay: 400, type: 'info', text: 'Connecting to daemon...' },
+      { delay: 600, type: 'success', text: 'VM web-vm-01 booted successfully! PID: 12895 | Vsock CID: 3' },
       
-      { delay: 1500, type: 'input', cmd: 'pane-cli exec --id web-vm-01 --cmd "uname -a"' },
+      { delay: 1500, type: 'input', cmd: 'pane exec web-vm-01 -- uname -a' },
       { delay: 300, type: 'output', text: 'Linux guest-os 5.15.0-v8 #1 SMP PREEMPT x86_64 GNU/Linux' },
-      { delay: 100, type: 'success', text: 'Command executed successfully (Time: 8.60ms) | Exit Code: 0' },
+      { delay: 100, type: 'success', text: 'Command executed successfully | Exit Code: 0' },
       
-      { delay: 1500, type: 'input', cmd: 'pane-cli snapshot --id web-vm-01 --out /tmp/web-vm-01.snap' },
-      { delay: 200, type: 'info', text: 'Freezing VM vCPUs & capturing memory pages...' },
-      { delay: 700, type: 'success', text: 'Snapshot captured successfully (Time: 78.00ms)' },
+      { delay: 1500, type: 'input', cmd: 'pane snapshot web-vm-01' },
+      { delay: 200, type: 'info', text: 'Taking snapshot of VM web-vm-01 (tag: latest)...' },
+      { delay: 700, type: 'success', text: 'Snapshot completed successfully!' },
       
-      { delay: 1200, type: 'input', cmd: 'pane-cli fork --id web-vm-01 --snap /tmp/web-vm-01.snap --new-id web-vm-02' },
-      { delay: 300, type: 'info', text: 'Creating CoW memory maps and linking disk files...' },
-      { delay: 500, type: 'success', text: 'VM clone web-vm-02 running (Time: 34.00ms) | PID: 13012' },
+      { delay: 1200, type: 'input', cmd: 'pane fork web-vm-01 --count 1 --prefix web-vm-02' },
+      { delay: 300, type: 'info', text: 'Forking clone 1 of 1: ID=web-vm-02-1, CID=11...' },
+      { delay: 500, type: 'success', text: 'Clone web-vm-02-1 forked successfully! PID: 13012' },
       
-      { delay: 1800, type: 'input', cmd: 'pane-cli destroy --id web-vm-01' },
-      { delay: 200, type: 'info', text: 'Reclaiming memory pages, removing vsock mappings, cleaning cgroup v2...' },
-      { delay: 400, type: 'success', text: 'VM web-vm-01 destroyed (Time: 12.00ms) | 0 resource leaks' }
+      { delay: 1800, type: 'input', cmd: 'pane rm web-vm-01' },
+      { delay: 200, type: 'info', text: 'Destroying VM web-vm-01...' },
+      { delay: 400, type: 'success', text: 'VM web-vm-01 destroyed successfully.' }
     ];
 
     let stepIndex = 0;
@@ -886,9 +886,9 @@
           terminal.innerHTML = `
             <div class="terminal-line">
               <span class="prompt-symbol">$</span>
-              <span class="cmd-text">pane-api --port 50051</span>
+              <span class="cmd-text">pane daemon start</span>
             </div>
-            <div class="output-text">Starting Pane gRPC server on port 50051...</div>
+            <div class="output-text">Starting Pane daemon on UNIX socket: /run/pane.sock</div>
           `;
           stepIndex = 0;
           runNextStep();
