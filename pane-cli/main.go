@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -22,8 +23,9 @@ import (
 )
 
 var (
-	standaloneFlag bool
-	socketFlag     string
+	standaloneFlag     bool
+	socketFlag         string
+	pullContainerImage func(string, string) error
 )
 
 func main() {
@@ -49,6 +51,9 @@ func main() {
 	rootCmd.AddCommand(newVersionCommand())
 	rootCmd.AddCommand(newConfigCommand())
 	rootCmd.AddCommand(newImageCommand())
+	rootCmd.AddCommand(newPullCommand())
+	rootCmd.AddCommand(newImagesCommand())
+	rootCmd.AddCommand(newRmiCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -292,16 +297,12 @@ func newRunCommand() *cobra.Command {
 			// Precedence merging logic
 			spec := panespec.DefaultProfile()
 
-			// 1. Overlay image metadata (Phase 3 stubs: look for cached specs)
+			// 1. Overlay image metadata
 			if image != "" {
-				imagePath := filepath.Join("/var/lib/pane/images", image, "panespec.json")
-				if _, err := os.Stat(imagePath); err == nil {
-					if specImg, err := panespec.ConfigValidate(imagePath); err == nil {
-						spec = panespec.Merge(spec, specImg)
-					}
+				if specImg, err := panespec.InspectImage(image); err == nil {
+					spec = panespec.Merge(spec, specImg)
 				} else {
 					// Standalone images or remote checks:
-					// Before Phase 3 database, fail if name is specified as image and no local paths provided.
 					if kernelFlag == "" && isoFlag == "" && !strings.Contains(image, "://") {
 						return fmt.Errorf("image %q not found. Please run \"pane pull %s\" first", image, image)
 					}
@@ -808,40 +809,96 @@ func newConfigCommand() *cobra.Command {
 	return cmd
 }
 
-// Image commands stub
+// Image commands
+func newPullCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "pull <ref>",
+		Short: "Pull an image (manifest, container, URL, or local path)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("Pulling image: %s...\n", args[0])
+			return panespec.PullImage(args[0], pullContainerImage)
+		},
+	}
+}
+
+func newImagesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "images",
+		Short: "List cached images",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			list, err := panespec.ListImages()
+			if err != nil {
+				return err
+			}
+			if len(list) == 0 {
+				fmt.Println("No cached images.")
+				return nil
+			}
+			fmt.Printf("%-30s %-10s %-15s %-12s\n", "IMAGE NAME", "VERSION", "VMM BACKEND", "SIZE")
+			for _, img := range list {
+				sizeStr := formatBytes(img.Size)
+				fmt.Printf("%-30s %-10s %-15s %-12s\n", img.Metadata.Name, img.Metadata.Version, img.Metadata.VMM, sizeStr)
+			}
+			return nil
+		},
+	}
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func newRmiCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rmi <image>",
+		Short: "Remove a cached image",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("Removing image %s...\n", args[0])
+			err := panespec.RemoveImage(args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Println("Image removed successfully.")
+			return nil
+		},
+	}
+}
+
+func newImageInspectCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "inspect <image>",
+		Short: "Display resolved panespec for the image",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			spec, err := panespec.InspectImage(args[0])
+			if err != nil {
+				return err
+			}
+			data, _ := json.MarshalIndent(spec, "", "  ")
+			fmt.Println(string(data))
+			return nil
+		},
+	}
+}
+
 func newImageCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "image",
 		Short: "Manage images",
 	}
 
-	pullCmd := &cobra.Command{
-		Use:   "pull <ref>",
-		Short: "Pull an image (manifest or container)",
-		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Image pull stub for: %s\n", args[0])
-		},
-	}
-
-	listCmd := &cobra.Command{
-		Use:   "images",
-		Short: "List cached images",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("No cached images.")
-		},
-	}
-
-	rmiCmd := &cobra.Command{
-		Use:   "rmi <image>",
-		Short: "Remove a cached image",
-		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Removing image %s\n", args[0])
-		},
-	}
-
-	cmd.AddCommand(pullCmd, listCmd, rmiCmd)
+	cmd.AddCommand(newPullCommand(), newImagesCommand(), newRmiCommand(), newImageInspectCommand())
 	return cmd
 }
 
