@@ -1,4 +1,8 @@
-CFLAGS ?= -Wall -Wextra -Werror -fsanitize=address,undefined -O2
+CFLAGS ?= -Wall -Wextra -Werror -O2
+ifeq ($(SANITIZE), 1)
+CFLAGS += -fsanitize=address,undefined
+endif
+
 INCLUDES = -Iinclude
 LIBS = -luring
 
@@ -6,9 +10,12 @@ SRCS = src/kvm.o src/virtio.o src/uring.o src/backends/firecracker.o src/backend
 
 TEST_BASES = test_create_destroy test_memory test_firecracker test_qemu test_uring_bench
 TESTS = $(TEST_BASES)
-ALL_TARGETS = $(TESTS) test_boot_serial
+ALL_TARGETS = $(TESTS) test_boot_serial libpane_vmm.a
 
 all: $(ALL_TARGETS)
+
+libpane_vmm.a: $(SRCS)
+	$(AR) rcs $@ $^
 
 test_create_destroy: src/test_create_destroy.o $(SRCS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LIBS)

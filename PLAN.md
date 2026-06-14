@@ -23,13 +23,13 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [x] io_uring disk layer via liburing implementation
 - [x] Benchmark: sequential read throughput must exceed direct syscall baseline by > 15%
 
-## Phase 6: pane-core - FFI Bindings
-- [ ] FFI bindings to pane-vmm (every C function wrapped with typed Rust interface)
-- [ ] No raw pointers visible above ffi/vmm.rs
+## Phase 6: pane-core - FFI Bindings ✓
+- [x] FFI bindings to pane-vmm (every C function wrapped with typed Rust interface)
+- [x] No raw pointers visible above ffi/vmm.rs
 
-## Phase 7: pane-core - VM State Machine
-- [ ] VM state machine: `Spawning → Running → Frozen → Dead`
-- [ ] Invalid transitions are compile-time errors via typestate pattern
+## Phase 7: pane-core - VM State Machine ✓
+- [x] VM state machine: `Spawning → Running → Frozen → Dead`
+- [x] Invalid transitions are compile-time errors via typestate pattern
 
 ## Phase 8: pane-core - exec via vsock
 - [ ] `exec` via vsock implementation
@@ -59,4 +59,5 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [ ] `pane run`, `pane exec`, `pane snapshot`, `pane fork`, `pane destroy` commands
 - [ ] Every command has `--json` flag
 
-## Current Focus: Phase 6
+## Current Focus: Phase 8
+

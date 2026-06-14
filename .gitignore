@@ -14,3 +14,12 @@ pane-vmm/src/*.o
 CLAUDE.md
 .remember/
 .gemini/
+
+# Rust build target directories
+pane-core/target/
+target/
+
+# Static libraries
+*.a
+pane-vmm/libpane_vmm.a
+

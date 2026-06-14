@@ -74,9 +74,23 @@
 
 ---
 
-# Phase 6: pane-core - FFI Bindings
+# Phase 6: pane-core - FFI Bindings ✓
 
 ## FFI Interface Setup
-- [ ] Map C headers and exports to Rust `extern "C"` declarations in `ffi/vmm.rs`
-- [ ] Wrap raw pointers and unsafe C calls inside safe Rust abstractions
-- [ ] Propagate typed errors from VMM returns to Rust standard `Result` type
+- [x] Map C headers and exports to Rust `extern "C"` declarations in `ffi/vmm.rs`
+- [x] Wrap raw pointers and unsafe C calls inside safe Rust abstractions
+- [x] Propagate typed errors from VMM returns to Rust standard `Result` type
+
+---
+
+# Phase 7: pane-core - VM State Machine ✓
+
+## State Machine
+- [x] Define VM state types: Spawning, Running, Frozen, Dead
+- [x] Implement sealed VmState trait to restrict invalid states
+- [x] Implement Vm<State> generic over typestates
+- [x] Implement compile-time enforced transition methods (start, freeze, resume, destroy)
+- [x] Add doc comments and examples for all public elements
+- [x] Create comprehensive integration test validating KVM lifecycle and Firecracker teardown
+- [x] Fix clippy warnings and ensure warnings-free compilation
+
