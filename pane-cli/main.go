@@ -28,6 +28,10 @@ var (
 	pullContainerImage func(string, string) error
 )
 
+func init() {
+	pullContainerImage = panespec.PullContainerImage
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "pane",
