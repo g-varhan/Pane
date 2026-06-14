@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #ifndef PANE_VMM_H
 #define PANE_VMM_H
 

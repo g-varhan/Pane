@@ -86,7 +86,14 @@ func PullContainerImage(ref, targetDir string) error {
 			}
 
 			// Resolve target path
-			target := filepath.Join(tempRootfsDir, filepath.Clean(header.Name))
+			target, err := secureJoin(tempRootfsDir, header.Name)
+			if err != nil {
+				rc.Close()
+				if gr != nil {
+					gr.Close()
+				}
+				return fmt.Errorf("invalid path in tar header %q: %w", header.Name, err)
+			}
 
 			// Handle whiteouts (.wh.*)
 			base := filepath.Base(header.Name)
@@ -94,7 +101,10 @@ func PullContainerImage(ref, targetDir string) error {
 			if strings.HasPrefix(base, ".wh.") {
 				if base == ".wh..wh..opq" {
 					// Opaque whiteout: delete all contents of the directory
-					targetDirToDelete := filepath.Join(tempRootfsDir, filepath.Clean(dir))
+					targetDirToDelete, err := secureJoin(tempRootfsDir, dir)
+					if err != nil {
+						continue
+					}
 					entries, err := os.ReadDir(targetDirToDelete)
 					if err == nil {
 						for _, entry := range entries {
@@ -104,7 +114,10 @@ func PullContainerImage(ref, targetDir string) error {
 				} else {
 					// Single file whiteout: delete the target file
 					fileToDelete := strings.TrimPrefix(base, ".wh.")
-					_ = os.RemoveAll(filepath.Join(tempRootfsDir, filepath.Clean(dir), fileToDelete))
+					targetFileToDelete, err := secureJoin(tempRootfsDir, filepath.Join(dir, fileToDelete))
+					if err == nil {
+						_ = os.RemoveAll(targetFileToDelete)
+					}
 				}
 				continue
 			}
@@ -150,7 +163,14 @@ func PullContainerImage(ref, targetDir string) error {
 			case tar.TypeLink:
 				_ = os.MkdirAll(filepath.Dir(target), 0755)
 				_ = os.Remove(target)
-				oldPath := filepath.Join(tempRootfsDir, filepath.Clean(header.Linkname))
+				oldPath, err := secureJoin(tempRootfsDir, header.Linkname)
+				if err != nil {
+					rc.Close()
+					if gr != nil {
+						gr.Close()
+					}
+					return fmt.Errorf("invalid hardlink target %q: %w", header.Linkname, err)
+				}
 				if err := os.Link(oldPath, target); err != nil {
 					rc.Close()
 					if gr != nil {
@@ -327,4 +347,26 @@ func checkFilesystem(path string) error {
 		return fmt.Errorf("conversion cache requires btrfs or xfs. Configure with PANE_IMAGE_CACHE=/path/on/btrfs")
 	}
 	return nil
+}
+
+// secureJoin securely joins the target path with the base directory,
+// ensuring that the resulting path does not escape the base directory.
+// This prevents Zip Slip vulnerabilities during archive extraction.
+func secureJoin(baseDir, targetPath string) (string, error) {
+	// Clean the base directory path
+	cleanBase := filepath.Clean(baseDir)
+
+	// Clean the target path, making it absolute relative to root so it can't escape
+	cleanTarget := filepath.Clean(string(filepath.Separator) + targetPath)
+	cleanTarget = strings.TrimPrefix(cleanTarget, string(filepath.Separator))
+
+	// Join the safe base and cleaned target
+	joined := filepath.Join(cleanBase, cleanTarget)
+
+	// Verify that the resulting path is within the base directory
+	if !strings.HasPrefix(joined, cleanBase+string(filepath.Separator)) && joined != cleanBase {
+		return "", fmt.Errorf("path escapes base directory")
+	}
+
+	return joined, nil
 }
