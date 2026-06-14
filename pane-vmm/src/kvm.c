@@ -105,8 +105,19 @@ void pane_vm_destroy(pane_vm_t *vm) {
         }
     }
 
-    if (vm->virtio_dev) {
-        free(vm->virtio_dev);
+    for (int i = 0; i < vm->virtio_dev_count; i++) {
+        if (vm->virtio_devs[i]) {
+            if (vm->virtio_devs[i]->free_dev) {
+                vm->virtio_devs[i]->free_dev(vm->virtio_devs[i]);
+            } else {
+                free(vm->virtio_devs[i]);
+            }
+        }
+    }
+
+    if (vm->ring) {
+        io_uring_queue_exit(vm->ring);
+        free(vm->ring);
     }
 
     if (vm->vm_fd >= 0) {
@@ -399,15 +410,11 @@ int pane_vm_setup_virtio_mmio(pane_vm_t *vm, uint64_t base_addr, uint64_t size, 
     return pane_virtio_mmio_init(vm, base_addr, size, irq);
 }
 
-void *pane_vm_get_virtio_dev(pane_vm_t *vm) {
-    if (!vm) return NULL;
-    return vm->virtio_dev;
-}
-
-void pane_vm_set_virtio_dev(pane_vm_t *vm, void *dev) {
-    if (vm) {
-        vm->virtio_dev = dev;
-    }
+int pane_vm_register_virtio_dev(pane_vm_t *vm, struct virtio_mmio_dev *dev) {
+    if (!vm || !dev) return -EINVAL;
+    if (vm->virtio_dev_count >= PANE_VMM_MAX_VIRTIO_DEVS) return -ENOMEM;
+    vm->virtio_devs[vm->virtio_dev_count++] = dev;
+    return 0;
 }
 
 void *pane_vm_gpa_to_hva(pane_vm_t *vm, uint64_t gpa) {

@@ -83,6 +83,10 @@ int pane_vm_setup_firecracker_mode(pane_vm_t *vm, uint32_t vcpu_id, uint64_t ent
 // Returns 0 on success, negative errno on failure.
 int pane_vm_setup_virtio_mmio(pane_vm_t *vm, uint64_t base_addr, uint64_t size, int irq);
 
+// Set up a virtio-mmio block device at the specified physical address range, IRQ, and backing file path.
+// Returns 0 on success, negative errno on failure.
+int pane_vm_setup_virtio_blk(pane_vm_t *vm, uint64_t base_addr, uint64_t size, int irq, const char *disk_path);
+
 // Set up a virtio-serial console for the VM.
 // Returns 0 on success, negative errno on failure.
 int pane_vm_set_virtio_console(pane_vm_t *vm);

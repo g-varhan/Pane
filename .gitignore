@@ -4,6 +4,7 @@ pane-vmm/test_create_destroy
 pane-vmm/test_memory
 pane-vmm/test_firecracker
 pane-vmm/test_qemu
+pane-vmm/test_uring_bench
 
 # Object files
 *.o

@@ -19,9 +19,9 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [x] QEMU backend implementation (full hardware emulation, Windows-capable)
 - [x] Benchmark: boot time < 3s with Tiny10 image
 
-## Phase 5: pane-vmm - io_uring Disk Layer
-- [ ] io_uring disk layer via liburing implementation
-- [ ] Benchmark: sequential read throughput must exceed direct syscall baseline by > 15%
+## Phase 5: pane-vmm - io_uring Disk Layer ✓
+- [x] io_uring disk layer via liburing implementation
+- [x] Benchmark: sequential read throughput must exceed direct syscall baseline by > 15%
 
 ## Phase 6: pane-core - FFI Bindings
 - [ ] FFI bindings to pane-vmm (every C function wrapped with typed Rust interface)
@@ -59,4 +59,4 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [ ] `pane run`, `pane exec`, `pane snapshot`, `pane fork`, `pane destroy` commands
 - [ ] Every command has `--json` flag
 
-## Current Focus: Phase 5
+## Current Focus: Phase 6
