@@ -279,34 +279,44 @@ impl FirecrackerVm {
         Ok(())
     }
 
-    /// Pauses, takes a snapshot of the VM's state, and resumes it.
+    /// Takes a snapshot of the VM's state (must be already paused).
     pub async fn create_snapshot(&self, snapshot_path: &str, mem_file_path: &str) -> Result<()> {
-        self.pause().await?;
         let payload = SnapshotCreate {
             snapshot_path: snapshot_path.to_string(),
             mem_file_path: mem_file_path.to_string(),
             snapshot_type: "Full".to_string(),
         };
         let body = serde_json::to_string(&payload)?;
-        let res = self
-            .send_request("PUT", "/snapshot/create", Some(&body))
-            .await;
-        // Always attempt to resume even if snapshot creation fails
-        let _ = self.resume().await;
-        res?;
+        self.send_request("PUT", "/snapshot/create", Some(&body)).await?;
         Ok(())
     }
 
-    /// Loads a snapshot and resumes execution.
+    /// Loads a snapshot without resuming execution.
     pub async fn load_snapshot(&self, snapshot_path: &str, mem_file_path: &str) -> Result<()> {
         let payload = SnapshotLoad {
             snapshot_path: snapshot_path.to_string(),
             mem_file_path: mem_file_path.to_string(),
-            resume_vm: Some(true),
+            resume_vm: Some(false),
         };
         let body = serde_json::to_string(&payload)?;
-        self.send_request("PUT", "/snapshot/load", Some(&body))
-            .await?;
+        self.send_request("PUT", "/snapshot/load", Some(&body)).await?;
+        Ok(())
+    }
+
+    /// Patches an existing drive (useful after loading a snapshot to update path_on_host).
+    pub async fn patch_drive(&self, drive_id: &str, path_on_host: &str) -> Result<()> {
+        #[derive(Serialize)]
+        struct DrivePatch {
+            drive_id: String,
+            path_on_host: String,
+        }
+        let payload = DrivePatch {
+            drive_id: drive_id.to_string(),
+            path_on_host: path_on_host.to_string(),
+        };
+        let body = serde_json::to_string(&payload)?;
+        let path = format!("/drives/{}", drive_id);
+        self.send_request("PATCH", &path, Some(&body)).await?;
         Ok(())
     }
 

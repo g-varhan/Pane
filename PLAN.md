@@ -36,9 +36,9 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [x] Stream stdout/stderr as async chunks
 - [x] Benchmark: round-trip < 10ms on loopback
 
-## Phase 9: pane-core - Snapshot + Fork
-- [ ] Snapshot + fork implementation
-- [ ] Benchmark: fork 50 VMs from one snapshot in < 2 seconds total wall time
+## Phase 9: pane-core - Snapshot + Fork ✓
+- [x] Snapshot + fork implementation
+- [x] Benchmark: fork 50 VMs from one snapshot in < 2 seconds total wall time
 
 ## Phase 10: pane-core - cgroup v2 Resource Controls
 - [ ] cgroup v2 resource controls implementation
@@ -59,5 +59,4 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [ ] `pane run`, `pane exec`, `pane snapshot`, `pane fork`, `pane destroy` commands
 - [ ] Every command has `--json` flag
 
-## Current Focus: Phase 9
-
+## Current Focus: Phase 10

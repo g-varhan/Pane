@@ -321,6 +321,27 @@ impl Vm<Spawning> {
         }
     }
 
+    /// Creates a new VM by forking an existing snapshot, returning a VM in the Frozen state.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use pane_core::vm::Vm;
+    /// let frozen_vm = Vm::fork_firecracker("fc-fork-1", "/path/to/snap", "/path/to/mem").await.unwrap();
+    /// # });
+    /// ```
+    pub async fn fork_firecracker(id: &str, snapshot_path: &str, mem_file_path: &str) -> Result<Vm<Frozen>> {
+        let mut vm = Self::new_firecracker(id);
+        vm.spawn().await?;
+        vm.load_snapshot(snapshot_path, mem_file_path).await?;
+        Ok(Vm {
+            id: vm.id,
+            backend: vm.backend,
+            vsock_cid: vm.vsock_cid,
+            _state: PhantomData,
+        })
+    }
+
     /// Transitions the Spawning VM to Running by starting execution.
     ///
     /// # Example
@@ -475,6 +496,32 @@ impl Vm<Frozen> {
             vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
+    }
+
+    /// Patches an existing block device in a frozen VM (e.g., after loading a snapshot for a fork).
+    pub async fn patch_drive(&self, drive_id: &str, path_on_host: &str) -> Result<()> {
+        match &self.backend {
+            VmBackend::Firecracker(fc) => fc.patch_drive(drive_id, path_on_host).await,
+            VmBackend::Native(_) => Ok(()),
+        }
+    }
+
+    /// Updates the vsock configuration in a frozen VM (e.g., after loading a snapshot for a fork).
+    pub async fn configure_vsock(&mut self, guest_cid: u32) -> Result<()> {
+        self.vsock_cid = guest_cid;
+        match &self.backend {
+            VmBackend::Firecracker(fc) => {
+                let uds_path = self.get_vsock_socket_path();
+                let config = crate::backends::VsockConfig {
+                    vsock_id: "vsock0".to_string(),
+                    guest_cid,
+                    uds_path: uds_path.to_string_lossy().into_owned(),
+                };
+                fc.configure_vsock(&config).await?;
+            }
+            VmBackend::Native(_) => {}
+        }
+        Ok(())
     }
 
     /// Creates a snapshot of the Frozen VM to the specified file paths.
