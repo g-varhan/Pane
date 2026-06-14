@@ -37,6 +37,14 @@ pub struct VsockConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NetworkInterfaceConfig {
+    pub iface_id: String,
+    pub host_dev_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guest_mac: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Action {
     action_type: String,
 }
@@ -252,6 +260,14 @@ impl FirecrackerVm {
         Ok(())
     }
 
+    /// Configures a network interface.
+    pub async fn configure_network_interface(&self, config: &NetworkInterfaceConfig) -> Result<()> {
+        let body = serde_json::to_string(config)?;
+        let path = format!("/network-interfaces/{}", config.iface_id);
+        self.send_request("PUT", &path, Some(&body)).await?;
+        Ok(())
+    }
+
     /// Starts the VM instance.
     pub async fn start(&self) -> Result<()> {
         let body = serde_json::to_string(&Action {
@@ -287,7 +303,8 @@ impl FirecrackerVm {
             snapshot_type: "Full".to_string(),
         };
         let body = serde_json::to_string(&payload)?;
-        self.send_request("PUT", "/snapshot/create", Some(&body)).await?;
+        self.send_request("PUT", "/snapshot/create", Some(&body))
+            .await?;
         Ok(())
     }
 
@@ -299,7 +316,8 @@ impl FirecrackerVm {
             resume_vm: Some(false),
         };
         let body = serde_json::to_string(&payload)?;
-        self.send_request("PUT", "/snapshot/load", Some(&body)).await?;
+        self.send_request("PUT", "/snapshot/load", Some(&body))
+            .await?;
         Ok(())
     }
 

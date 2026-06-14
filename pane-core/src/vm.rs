@@ -298,6 +298,17 @@ impl Vm<Spawning> {
         Ok(())
     }
 
+    /// Configures a network interface for the VM.
+    pub async fn configure_network_interface(
+        &self,
+        config: &crate::backends::NetworkInterfaceConfig,
+    ) -> Result<()> {
+        match &self.backend {
+            VmBackend::Firecracker(fc) => fc.configure_network_interface(config).await,
+            VmBackend::Native(_) => Ok(()),
+        }
+    }
+
     /// Configures the kernel boot source details.
     ///
     /// # Example
@@ -371,7 +382,11 @@ impl Vm<Spawning> {
     /// let frozen_vm = Vm::fork_firecracker("fc-fork-1", "/path/to/snap", "/path/to/mem").await.unwrap();
     /// # });
     /// ```
-    pub async fn fork_firecracker(id: &str, snapshot_path: &str, mem_file_path: &str) -> Result<Vm<Frozen>> {
+    pub async fn fork_firecracker(
+        id: &str,
+        snapshot_path: &str,
+        mem_file_path: &str,
+    ) -> Result<Vm<Frozen>> {
         let mut vm = Self::new_firecracker(id);
         vm.spawn().await?;
         vm.load_snapshot(snapshot_path, mem_file_path).await?;
@@ -509,6 +524,16 @@ impl Vm<Running> {
             VmBackend::Native(_) => crate::exec::exec_in_guest(&vsock_uds_path, req, false).await,
         }
     }
+
+    /// Unsafely reconstructs a Running VM instance from an ID.
+    pub fn assume_running(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            backend: VmBackend::Firecracker(Box::new(FirecrackerVm::new(id))),
+            vsock_cid: 3,
+            _state: PhantomData,
+        }
+    }
 }
 
 impl Vm<Frozen> {
@@ -567,6 +592,17 @@ impl Vm<Frozen> {
         Ok(())
     }
 
+    /// Configures a network interface in a frozen VM (e.g., after loading a snapshot for a fork).
+    pub async fn configure_network_interface(
+        &self,
+        config: &crate::backends::NetworkInterfaceConfig,
+    ) -> Result<()> {
+        match &self.backend {
+            VmBackend::Firecracker(fc) => fc.configure_network_interface(config).await,
+            VmBackend::Native(_) => Ok(()),
+        }
+    }
+
     /// Creates a snapshot of the Frozen VM to the specified file paths.
     ///
     /// # Example
@@ -609,5 +645,15 @@ impl Vm<Frozen> {
             vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
+    }
+
+    /// Unsafely reconstructs a Frozen VM instance from an ID.
+    pub fn assume_frozen(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            backend: VmBackend::Firecracker(Box::new(FirecrackerVm::new(id))),
+            vsock_cid: 3,
+            _state: PhantomData,
+        }
     }
 }

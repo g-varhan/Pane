@@ -647,3 +647,8 @@ int pane_vm_setup_virtio_blk(pane_vm_t *vm, uint64_t base_addr, uint64_t size, i
 
     return 0;
 }
+
+int pane_vm_set_virtio_console(pane_vm_t *vm) {
+    return pane_vm_setup_virtio_mmio(vm, 0x10000000, 512, 5);
+}
+

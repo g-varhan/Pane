@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package pane;
+
+option go_package = "pane/pane-api/proto;proto";
+
+service PaneService {
+    rpc Spawn(SpawnRequest) returns (SpawnResponse);
+    rpc Exec(ExecRequest) returns (stream ExecResponse);
+    rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+    rpc Fork(ForkRequest) returns (ForkResponse);
+    rpc Destroy(DestroyRequest) returns (DestroyResponse);
+}
+
+message SpawnRequest {
+    string id = 1;
+    string kernel_path = 2;
+    string rootfs_path = 3;
+    uint32 vcpu_count = 4;
+    uint32 mem_size_mib = 5;
+    string boot_args = 6;
+}
+
+message SpawnResponse {
+    string id = 1;
+    uint32 vsock_cid = 2;
+    uint32 pid = 3;
+}
+
+message ExecRequest {
+    string id = 1;
+    string command = 2;
+    repeated string args = 3;
+}
+
+message ExecResponse {
+    bytes data = 1;
+    bool is_stderr = 2;
+    int32 exit_code = 3;
+}
+
+message SnapshotRequest {
+    string id = 1;
+    string snapshot_path = 2;
+    string mem_file_path = 3;
+}
+
+message SnapshotResponse {
+    string id = 1;
+}
+
+message ForkRequest {
+    string id = 1;
+    string snapshot_path = 2;
+    string mem_file_path = 3;
+    string new_rootfs_path = 4;
+    uint32 new_vsock_cid = 5;
+}
+
+message ForkResponse {
+    string id = 1;
+    uint32 vsock_cid = 2;
+    uint32 pid = 3;
+}
+
+message DestroyRequest {
+    string id = 1;
+}
+
+message DestroyResponse {
+    string id = 1;
+}

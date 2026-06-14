@@ -62,11 +62,14 @@ pub fn get_cgroup_base_path() -> Result<PathBuf> {
     if let Ok(content) = fs::read_to_string("/proc/self/cgroup") {
         for line in content.lines() {
             let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 3 && (parts[1] == "" || parts[1] == "name=systemd") {
+            if parts.len() >= 3 && (parts[1].is_empty() || parts[1] == "name=systemd") {
                 let rel_path = parts[2].trim_start_matches('/');
                 let mut path = PathBuf::from("/sys/fs/cgroup").join(rel_path);
                 while path.as_os_str() != "/sys/fs/cgroup" && path.as_os_str() != "/" {
-                    if fs::metadata(&path).map(|m| !m.permissions().readonly()).unwrap_or(false) {
+                    if fs::metadata(&path)
+                        .map(|m| !m.permissions().readonly())
+                        .unwrap_or(false)
+                    {
                         let pane_path = path.join("pane");
                         if pane_path.exists() || fs::create_dir_all(&pane_path).is_ok() {
                             let subtree_file = pane_path.join("cgroup.subtree_control");
@@ -101,7 +104,7 @@ impl CgroupManager {
     pub fn create(vm_id: &str) -> Result<Self> {
         let base = get_cgroup_base_path()?;
         let path = base.join(vm_id);
-        
+
         if !path.exists() {
             fs::create_dir_all(&path).map_err(|e| {
                 PaneError::Io(std::io::Error::new(
@@ -125,7 +128,12 @@ impl CgroupManager {
         fs::write(&procs_file, pid.to_string()).map_err(|e| {
             PaneError::Io(std::io::Error::new(
                 e.kind(),
-                format!("Failed to write PID {} to {}: {}", pid, procs_file.display(), e),
+                format!(
+                    "Failed to write PID {} to {}: {}",
+                    pid,
+                    procs_file.display(),
+                    e
+                ),
             ))
         })?;
         Ok(())
@@ -187,7 +195,11 @@ impl CgroupManager {
         fs::remove_dir(&self.path).map_err(|e| {
             PaneError::Io(std::io::Error::new(
                 e.kind(),
-                format!("Failed to remove cgroup directory {}: {}", self.path.display(), e),
+                format!(
+                    "Failed to remove cgroup directory {}: {}",
+                    self.path.display(),
+                    e
+                ),
             ))
         })?;
 

@@ -18,7 +18,10 @@ async fn test_cgroups_lifecycle_and_limits() {
     let base_path = match get_cgroup_base_path() {
         Ok(path) => path,
         Err(e) => {
-            println!("Skipping cgroup test: cgroup v2 base path not writeable: {:?}", e);
+            println!(
+                "Skipping cgroup test: cgroup v2 base path not writeable: {:?}",
+                e
+            );
             return;
         }
     };
@@ -39,10 +42,10 @@ async fn test_cgroups_lifecycle_and_limits() {
 
     // 4. Verify cgroup directory exists and contains the VM's PID
     assert!(cg_dir.exists(), "Cgroup directory should be created");
-    
-    let procs_content = fs::read_to_string(cg_dir.join("cgroup.procs"))
-        .expect("Failed to read cgroup.procs");
-    
+
+    let procs_content =
+        fs::read_to_string(cg_dir.join("cgroup.procs")).expect("Failed to read cgroup.procs");
+
     let procs_pids: Vec<u32> = procs_content
         .lines()
         .filter_map(|line| line.parse::<u32>().ok())
@@ -57,7 +60,7 @@ async fn test_cgroups_lifecycle_and_limits() {
 
     // 5. Apply resource controls
     let limits = ResourceControls {
-        memory_max: Some(268435456), // 256MB
+        memory_max: Some(268435456),  // 256MB
         memory_high: Some(209715200), // 200MB
         cpu_weight: Some(150),
         cpu_max: Some(CpuMaxLimit {
@@ -67,7 +70,8 @@ async fn test_cgroups_lifecycle_and_limits() {
         pids_max: Some(20),
     };
 
-    vm.apply_resources(&limits).expect("Failed to apply resource controls");
+    vm.apply_resources(&limits)
+        .expect("Failed to apply resource controls");
 
     // 6. Verify limits are written correctly
     let mem_max_val: u64 = fs::read_to_string(cg_dir.join("memory.max"))
@@ -105,6 +109,9 @@ async fn test_cgroups_lifecycle_and_limits() {
 
     // 7. Destroy VM and verify cgroup directory is cleaned up
     let dead_vm = vm.destroy().await.expect("Failed to destroy VM");
-    assert!(!cg_dir.exists(), "Cgroup directory should be cleaned up after VM destruction");
+    assert!(
+        !cg_dir.exists(),
+        "Cgroup directory should be cleaned up after VM destruction"
+    );
     drop(dead_vm);
 }
