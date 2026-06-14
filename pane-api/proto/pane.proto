@@ -19,6 +19,7 @@ message SpawnRequest {
     uint32 vcpu_count = 4;
     uint32 mem_size_mib = 5;
     string boot_args = 6;
+    string spec_json = 7;
 }
 
 message SpawnResponse {

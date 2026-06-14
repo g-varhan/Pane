@@ -118,7 +118,7 @@ func newDaemonCommand() *cobra.Command {
 			if path == "" {
 				path = "/run/pane.sock"
 				// Fallback if /run is not writable
-				if err := os.MkdirAll("/run", 0755); err != nil {
+				if syscall.Access("/run", 2) != nil {
 					path = "/tmp/pane.sock"
 				}
 			}
@@ -143,6 +143,24 @@ func newDaemonCommand() *cobra.Command {
 					}
 				}
 			}
+
+			// Reap zombie child processes automatically
+			go func() {
+				for {
+					var status syscall.WaitStatus
+					pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+					if err != nil {
+						if err == syscall.ECHILD {
+							time.Sleep(1 * time.Second)
+							continue
+						}
+					}
+					if pid <= 0 {
+						time.Sleep(500 * time.Millisecond)
+						continue
+					}
+				}
+			}()
 
 			fmt.Printf("Starting Pane daemon on UNIX socket: %s\n", path)
 			srv, err := server.StartGrpcServerUnix(path)
@@ -294,8 +312,10 @@ func newRunCommand() *cobra.Command {
 		Short: "Run a VM from an image reference or parameters",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var image string
+			var extraArgs []string
 			if len(args) > 0 {
 				image = args[0]
+				extraArgs = args[1:]
 			}
 
 			// Precedence merging logic
@@ -326,7 +346,7 @@ func newRunCommand() *cobra.Command {
 			cliSpec := PaneSpecToPaneSpec(
 				nameFlag, cpusFlag, memoryFlag, diskSizeFlag, isoFlag, kernelFlag,
 				cmdlineFlag, virtioNetFlag, noVirtioNet, virtioBlkFlag, noVirtioBlk,
-				guiFlag, displayFlag, cmd.Flags().Args(),
+				guiFlag, displayFlag, extraArgs,
 			)
 			spec = panespec.Merge(spec, cliSpec)
 
@@ -699,9 +719,14 @@ func newPsCommand() *cobra.Command {
 					continue
 				}
 				for _, f := range files {
-					if !f.IsDir() && strings.HasPrefix(f.Name(), "fc-") && strings.HasSuffix(f.Name(), ".sock") {
+					if !f.IsDir() && (strings.HasPrefix(f.Name(), "fc-") || strings.HasPrefix(f.Name(), "qmp-")) && strings.HasSuffix(f.Name(), ".sock") {
 						// Extract VM ID
-						vmID := strings.TrimPrefix(f.Name(), "fc-")
+						var vmID string
+						if strings.HasPrefix(f.Name(), "fc-") {
+							vmID = strings.TrimPrefix(f.Name(), "fc-")
+						} else {
+							vmID = strings.TrimPrefix(f.Name(), "qmp-")
+						}
 						vmID = strings.TrimSuffix(vmID, ".sock")
 						// Skip vsock sockets
 						if strings.HasPrefix(vmID, "vsock-") {

@@ -159,6 +159,8 @@ impl<State: VmState> Vm<State> {
 
     /// Helper to cleanup underlying VM resources (killing processes, removing sockets).
     async fn cleanup(&mut self) -> Result<()> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
         match &mut self.backend {
             VmBackend::Firecracker(fc) => {
                 fc.kill().await?;
@@ -167,6 +169,28 @@ impl<State: VmState> Vm<State> {
                 // SafeVm auto-destroys on drop.
             }
         }
+
+        // Clean up QMP socket if it exists for QEMU
+        let qmp_socket = if std::path::Path::new("/run/pane").join(format!("qmp-{}.sock", self.id)).exists() {
+            Some(std::path::Path::new("/run/pane").join(format!("qmp-{}.sock", self.id)))
+        } else if std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", self.id)).exists() {
+            Some(std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", self.id)))
+        } else {
+            None
+        };
+
+        if let Some(sock_path) = qmp_socket {
+            if let Ok(mut stream) = tokio::net::UnixStream::connect(&sock_path).await {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf).await;
+                let _ = stream.write_all(b"{\"execute\":\"qmp_capabilities\"}\n").await;
+                let _ = stream.read(&mut buf).await;
+                let _ = stream.write_all(b"{\"execute\":\"quit\"}\n").await;
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            let _ = std::fs::remove_file(sock_path);
+        }
+
         // Clean up cgroup directory
         if let Ok(cg) = crate::resources::CgroupManager::create(&self.id) {
             let _ = cg.destroy();
@@ -459,11 +483,15 @@ impl Vm<Running> {
     /// # });
     /// ```
     pub async fn freeze(self) -> Result<Vm<Frozen>> {
-        match &self.backend {
-            VmBackend::Firecracker(fc) => fc.pause().await?,
-            VmBackend::Native(vm) => {
-                if vm.get_backend() == crate::ffi::pane_backend_t::Qemu {
-                    vm.qemu_suspend()?;
+        if is_qemu(&self.id) {
+            send_qmp_command_on_demand(&self.id, "{\"execute\":\"stop\"}").await?;
+        } else {
+            match &self.backend {
+                VmBackend::Firecracker(fc) => fc.pause().await?,
+                VmBackend::Native(vm) => {
+                    if vm.get_backend() == crate::ffi::pane_backend_t::Qemu {
+                        vm.qemu_suspend()?;
+                    }
                 }
             }
         }
@@ -550,11 +578,15 @@ impl Vm<Frozen> {
     /// # });
     /// ```
     pub async fn resume(self) -> Result<Vm<Running>> {
-        match &self.backend {
-            VmBackend::Firecracker(fc) => fc.resume().await?,
-            VmBackend::Native(vm) => {
-                if vm.get_backend() == crate::ffi::pane_backend_t::Qemu {
-                    vm.qemu_resume()?;
+        if is_qemu(&self.id) {
+            send_qmp_command_on_demand(&self.id, "{\"execute\":\"cont\"}").await?;
+        } else {
+            match &self.backend {
+                VmBackend::Firecracker(fc) => fc.resume().await?,
+                VmBackend::Native(vm) => {
+                    if vm.get_backend() == crate::ffi::pane_backend_t::Qemu {
+                        vm.qemu_resume()?;
+                    }
                 }
             }
         }
@@ -616,10 +648,36 @@ impl Vm<Frozen> {
     /// # });
     /// ```
     pub async fn create_snapshot(&self, snapshot_path: &str, mem_file_path: &str) -> Result<()> {
-        match &self.backend {
-            VmBackend::Firecracker(fc) => fc.create_snapshot(snapshot_path, mem_file_path).await?,
-            VmBackend::Native(_) => {
-                // Native KVM snapshotting
+        if is_qemu(&self.id) {
+            let cmd = format!(
+                "{{\"execute\":\"migrate\",\"arguments\":{{\"uri\":\"exec:cat > {}\"}}}}",
+                mem_file_path
+            );
+            send_qmp_command_on_demand(&self.id, &cmd).await?;
+
+            // Wait for migration to complete
+            let start = std::time::Instant::now();
+            let timeout = std::time::Duration::from_secs(15);
+            while start.elapsed() < timeout {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                if let Ok(resp) = send_qmp_command_on_demand(&self.id, "{\"execute\":\"query-migrate\"}").await {
+                    if resp.contains("\"status\": \"completed\"") {
+                        break;
+                    }
+                    if resp.contains("\"status\": \"failed\"") || resp.contains("\"status\": \"cancelled\"") {
+                        return Err(crate::error::PaneError::Api {
+                            status: "Migration failed".to_string(),
+                            body: resp,
+                        });
+                    }
+                }
+            }
+        } else {
+            match &self.backend {
+                VmBackend::Firecracker(fc) => fc.create_snapshot(snapshot_path, mem_file_path).await?,
+                VmBackend::Native(_) => {
+                    // Native KVM snapshotting
+                }
             }
         }
         Ok(())
@@ -656,4 +714,34 @@ impl Vm<Frozen> {
             _state: PhantomData,
         }
     }
+}
+
+fn is_qemu(id: &str) -> bool {
+    std::path::Path::new("/run/pane").join(format!("qmp-{}.sock", id)).exists() ||
+    std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", id)).exists()
+}
+
+async fn send_qmp_command_on_demand(id: &str, cmd: &str) -> Result<String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let run_pane = std::path::Path::new("/run/pane");
+    let qmp_socket = if run_pane.join(format!("qmp-{}.sock", id)).exists() {
+        run_pane.join(format!("qmp-{}.sock", id))
+    } else {
+        std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", id))
+    };
+
+    let mut stream = tokio::net::UnixStream::connect(&qmp_socket).await.map_err(|e| {
+        crate::error::PaneError::Socket(format!("QMP socket connect failed: {}", e))
+    })?;
+
+    let mut buf = [0u8; 1024];
+    let _ = stream.read(&mut buf).await;
+    let _ = stream.write_all(b"{\"execute\":\"qmp_capabilities\"}\n").await;
+    let _ = stream.read(&mut buf).await;
+    let _ = stream.write_all(format!("{}\n", cmd).as_bytes()).await;
+    let n = stream.read(&mut buf).await.map_err(|e| {
+        crate::error::PaneError::Socket(format!("QMP read failed: {}", e))
+    })?;
+
+    Ok(String::from_utf8_lossy(&buf[..n]).into_owned())
 }

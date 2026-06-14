@@ -8,7 +8,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// ────────────────────────────────────────────────────────────────────────────
+// Default download URLs for proprietary / external images
+// ────────────────────────────────────────────────────────────────────────────
+
+const (
+	// tiny10 – minimal Windows 11 23H2 image hosted on the Internet Archive.
+	// Direct link; archive.org redirects to a CDN node (302 → HTTPS).
+	defaultTiny10URL = "https://archive.org/download/tiny-10-23-h2/tiny10%20x64%2023h2.iso"
+
+	// VirtIO-Win – Fedora-hosted driver ISO for Windows guests.
+	// Corrected filename (the .iso symlink redirects to the versioned file).
+	defaultVirtioWinURL = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.285-1/virtio-win-0.1.285.iso"
+)
+
+// ────────────────────────────────────────────────────────────────────────────
+// Image metadata types
+// ────────────────────────────────────────────────────────────────────────────
 
 type ImageMetadata struct {
 	Name            string   `json:"name"`
@@ -19,26 +38,137 @@ type ImageMetadata struct {
 	DriversRequired []string `json:"drivers_required,omitempty"`
 }
 
-func getImagesDir() string {
-	dir := "/var/lib/pane/images"
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		dir = filepath.Join(os.TempDir(), "pane/images")
-	}
-	return dir
-}
-
 type ImageInfo struct {
 	Metadata ImageMetadata `json:"metadata"`
 	Size     int64         `json:"size"`
 }
 
-// PullImage resolves the ref (manifest, local, http, container) and registers it
+// ────────────────────────────────────────────────────────────────────────────
+// Built-in distribution registry
+// ────────────────────────────────────────────────────────────────────────────
+
+type distroEntry struct {
+	version string
+	url     string
+	cpus    uint32
+	memory  string
+}
+
+// knownDistros maps a short name to its download URL and default resources.
+// URLs always point to the latest stable release available via a stable mirror.
+var knownDistros = map[string]distroEntry{
+	// ── Alpine ──────────────────────────────────────────────────────────────
+	"alpine": {
+		version: "v3.21",
+		url:     "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-virt-3.21.0-x86_64.iso",
+		cpus:    1,
+		memory:  "512MiB",
+	},
+	// ── Ubuntu ──────────────────────────────────────────────────────────────
+	"ubuntu": {
+		version: "v24.04",
+		url:     "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+	"ubuntu-desktop": {
+		version: "v24.04",
+		url:     "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-desktop-amd64.iso",
+		cpus:    2,
+		memory:  "4GiB",
+	},
+	"ubuntu-minimal": {
+		version: "v24.04",
+		url:     "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso",
+		cpus:    1,
+		memory:  "1GiB",
+	},
+	// ── Debian ──────────────────────────────────────────────────────────────
+	"debian": {
+		version: "v12",
+		url:     "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.10.0-amd64-netinst.iso",
+		cpus:    1,
+		memory:  "1GiB",
+	},
+	"debian-live": {
+		version: "v12",
+		url:     "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-12.10.0-amd64-gnome.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+	// ── Fedora ──────────────────────────────────────────────────────────────
+	"fedora": {
+		version: "v41",
+		url:     "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Server/x86_64/iso/Fedora-Server-dvd-x86_64-41-1.4.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+	"fedora-workstation": {
+		version: "v41",
+		url:     "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-41-1.4.iso",
+		cpus:    2,
+		memory:  "4GiB",
+	},
+	// ── Arch Linux ──────────────────────────────────────────────────────────
+	"arch": {
+		version: "latest",
+		url:     "https://geo.mirror.pkgbuild.com/iso/latest/archlinux-x86_64.iso",
+		cpus:    1,
+		memory:  "1GiB",
+	},
+	// ── Kali Linux ──────────────────────────────────────────────────────────
+	"kali": {
+		version: "v2024.4",
+		url:     "https://cdimage.kali.org/kali-2024.4/kali-linux-2024.4-installer-amd64.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+	// ── openSUSE ────────────────────────────────────────────────────────────
+	"opensuse": {
+		version: "v15.6",
+		url:     "https://download.opensuse.org/distribution/leap/15.6/iso/openSUSE-Leap-15.6-DVD-x86_64-Media.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+	// ── Rocky Linux ─────────────────────────────────────────────────────────
+	"rocky": {
+		version: "v9.4",
+		url:     "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.4-x86_64-minimal.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+	// ── AlmaLinux ───────────────────────────────────────────────────────────
+	"alma": {
+		version: "v9.4",
+		url:     "https://repo.almalinux.org/almalinux/9/isos/x86_64/AlmaLinux-9.4-x86_64-minimal.iso",
+		cpus:    2,
+		memory:  "2GiB",
+	},
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+func getImagesDir() string {
+	dir := "/var/lib/pane/images"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		dir = filepath.Join(os.TempDir(), "pane/images")
+		_ = os.MkdirAll(dir, 0755)
+	}
+	return dir
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// PullImage
+// ────────────────────────────────────────────────────────────────────────────
+
+// PullImage resolves the ref (built-in distro, local file, GitHub release, or
+// HTTP/HTTPS URL) and registers the image in /var/lib/pane/images.
 func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 	name := strings.TrimPrefix(ref, "pane://")
 	name = strings.TrimPrefix(name, "docker://")
 	name = strings.TrimPrefix(name, "oci://")
-
-	// Clean up image name for filesystem compatibility
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 
@@ -47,104 +177,20 @@ func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create image dir: %w", err)
 	}
-
 	diskPath := filepath.Join(targetDir, "disk.iso")
 
-	// 1. Check if it's the tiny10 Windows test image
+	// ── 1. tiny10 (Windows) ─────────────────────────────────────────────────
 	if name == "tiny10" {
-		srcIso := "/home/varhan/Documents/disk/tiny10 x64 23h2.iso"
-		if _, err := os.Stat(srcIso); os.IsNotExist(err) {
-			return fmt.Errorf("tiny10 test ISO not found at %s", srcIso)
-		}
-
-		fmt.Printf("Registering tiny10 test ISO via symlink...\n")
-		_ = os.Remove(diskPath)
-		if err := os.Symlink(srcIso, diskPath); err != nil {
-			// Fallback to copy if symlink fails
-			if err := copyFile(srcIso, diskPath); err != nil {
-				return fmt.Errorf("failed to copy tiny10 ISO: %w", err)
-			}
-		}
-
-		// Write metadata.json
-		meta := ImageMetadata{
-			Name:    "tiny10",
-			Version: "v1.0",
-			VMM:     "qemu",
-			Source:  "local://" + srcIso,
-		}
-		metaData, _ := json.MarshalIndent(meta, "", "  ")
-		_ = os.WriteFile(filepath.Join(targetDir, "metadata.json"), metaData, 0644)
-
-		// Write panespec.json
-		spec := DefaultProfile()
-		spec.VMM = PtrVMMType(VMMQemu)
-		spec.CPUs = PtrUint32(4)
-		spec.Memory = PtrString("4GiB")
-		spec.Disk = &DiskConfig{
-			Path:   PtrString(diskPath),
-			Format: PtrDiskFormat(FormatRaw),
-		}
-		spec.Drivers = &DriversConfig{
-			VirtioNet: PtrBool(true),
-			VirtioBlk: PtrBool(true),
-			VirtioRng: PtrBool(false),
-		}
-		spec.ExtraArgs = []string{
-			"-cdrom",
-			"/home/varhan/Documents/disk/virtio-win-0.1.271.iso",
-			"-vnc",
-			":1",
-		}
-		specData, _ := json.MarshalIndent(spec, "", "  ")
-		_ = os.WriteFile(filepath.Join(targetDir, "panespec.json"), specData, 0644)
-
-		fmt.Println("tiny10 registered successfully!")
-		return nil
+		return pullTiny10(diskPath, targetDir)
 	}
 
-	// 2. Check if it's the Alpine Linux download request
-	if name == "alpine" {
-		url := "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/x86_64/alpine-virt-3.19.1-x86_64.iso"
-		fmt.Printf("Downloading Alpine Linux ISO from %s...\n", url)
-
-		if err := downloadFile(url, diskPath); err != nil {
-			return fmt.Errorf("failed to download Alpine ISO: %w", err)
-		}
-
-		// Write metadata.json
-		meta := ImageMetadata{
-			Name:    "alpine",
-			Version: "v3.19",
-			VMM:     "qemu",
-			Source:  url,
-		}
-		metaData, _ := json.MarshalIndent(meta, "", "  ")
-		_ = os.WriteFile(filepath.Join(targetDir, "metadata.json"), metaData, 0644)
-
-		// Write panespec.json
-		spec := DefaultProfile()
-		spec.VMM = PtrVMMType(VMMQemu)
-		spec.CPUs = PtrUint32(1)
-		spec.Memory = PtrString("256MiB")
-		spec.Disk = &DiskConfig{
-			Path:   PtrString(diskPath),
-			Format: PtrDiskFormat(FormatRaw),
-		}
-		spec.Drivers = &DriversConfig{
-			VirtioNet: PtrBool(true),
-			VirtioBlk: PtrBool(true),
-			VirtioRng: PtrBool(false),
-		}
-		specData, _ := json.MarshalIndent(spec, "", "  ")
-		_ = os.WriteFile(filepath.Join(targetDir, "panespec.json"), specData, 0644)
-
-		fmt.Println("alpine pulled and registered successfully!")
-		return nil
+	// ── 2. Known Linux distros ──────────────────────────────────────────────
+	if entry, ok := knownDistros[name]; ok {
+		return pullDistro(name, entry, diskPath, targetDir)
 	}
 
-	// 3. Delegate OCI/Docker container pulls to pane-ctr in Phase 4
-	if strings.HasPrefix(ref, "docker://") || strings.HasPrefix(ref, "oci://") || ctrPullFunc != nil {
+	// ── 3. OCI/Docker containers ────────────────────────────────────────────
+	if strings.HasPrefix(ref, "docker://") || strings.HasPrefix(ref, "oci://") {
 		if ctrPullFunc != nil {
 			fmt.Printf("Delegating container pull for %s to pane-ctr...\n", ref)
 			return ctrPullFunc(ref, targetDir)
@@ -152,35 +198,338 @@ func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 		return fmt.Errorf("container pull driver (pane-ctr) not registered")
 	}
 
-	// 4. Fallback for generic URLs
+	// ── 4. Generic HTTP(S) URL ──────────────────────────────────────────────
 	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-		fmt.Printf("Downloading generic ISO from %s...\n", ref)
-		if err := downloadFile(ref, diskPath); err != nil {
+		fmt.Printf("Downloading ISO from %s\n", ref)
+		if err := downloadWithProgress(ref, diskPath); err != nil {
 			return err
 		}
-		meta := ImageMetadata{
-			Name:    name,
-			Version: "v1.0",
-			VMM:     "qemu",
-			Source:  ref,
-		}
-		metaData, _ := json.MarshalIndent(meta, "", "  ")
-		_ = os.WriteFile(filepath.Join(targetDir, "metadata.json"), metaData, 0644)
-
-		spec := DefaultProfile()
-		spec.VMM = PtrVMMType(VMMQemu)
-		spec.Disk = &DiskConfig{
-			Path:   PtrString(diskPath),
-			Format: PtrDiskFormat(FormatRaw),
-		}
-		specData, _ := json.MarshalIndent(spec, "", "  ")
-		_ = os.WriteFile(filepath.Join(targetDir, "panespec.json"), specData, 0644)
-
+		writeGenericMeta(name, ref, diskPath, targetDir)
 		return nil
 	}
 
-	return fmt.Errorf("unknown image reference scheme: %q", ref)
+	return fmt.Errorf("unknown image reference %q\n\nAvailable built-in distros: %s", ref, listKnownDistros())
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// tiny10 pull logic
+// ────────────────────────────────────────────────────────────────────────────
+
+func pullTiny10(diskPath, targetDir string) error {
+	// ── Resolve tiny10 ISO source (priority: env override > web) ────────────
+	tiny10URL := os.Getenv("GITHUB_TINY10_URL")
+	if tiny10URL == "" {
+		tiny10URL = os.Getenv("TINY10_URL")
+	}
+
+	if tiny10URL != "" || true {
+		// Check local path first so we never re-download unnecessarily.
+		srcIso := os.Getenv("TINY10_ISO_PATH")
+		if srcIso == "" {
+			srcIso = "/home/varhan/Documents/disk/tiny10 x64 23h2.iso"
+		}
+
+		if _, err := os.Stat(srcIso); err == nil {
+			// Local ISO exists — register via symlink.
+			fmt.Printf("  Found local tiny10 ISO: %s\n", srcIso)
+			_ = os.Remove(diskPath)
+			if err := os.Symlink(srcIso, diskPath); err != nil {
+				if err := copyFile(srcIso, diskPath); err != nil {
+					return fmt.Errorf("failed to link/copy tiny10 ISO: %w", err)
+				}
+			}
+		} else {
+			// Download from web.
+			url := tiny10URL
+			if url == "" {
+				url = defaultTiny10URL
+			}
+			fmt.Printf("\n  Pulling tiny10 (Windows 11 23H2 minimal)\n")
+			fmt.Printf("  Source : %s\n\n", url)
+			if err := downloadWithProgress(url, diskPath); err != nil {
+				return fmt.Errorf("failed to download tiny10: %w", err)
+			}
+		}
+	}
+
+	// ── Resolve VirtIO-Win driver ISO ────────────────────────────────────────
+	virtioPath := resolveVirtioWin(targetDir)
+
+	writeTiny10Meta(diskPath, virtioPath, targetDir)
+	fmt.Println("\n✓  tiny10 registered successfully!")
+	return nil
+}
+
+// resolveVirtioWin returns the local path to the VirtIO-Win driver ISO,
+// downloading it if necessary.
+func resolveVirtioWin(targetDir string) string {
+	// 1. Explicit env override.
+	if p := os.Getenv("VIRTIO_WIN_ISO"); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	// 2. Default local path (legacy).
+	legacy := "/home/varhan/Documents/disk/virtio-win-0.1.271.iso"
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+
+	// 3. Already downloaded alongside the tiny10 image.
+	cached := filepath.Join(targetDir, "virtio-win.iso")
+	if _, err := os.Stat(cached); err == nil {
+		return cached
+	}
+
+	// 4. Download from Fedora CDN.
+	virtioURL := os.Getenv("VIRTIO_WIN_URL")
+	if virtioURL == "" {
+		virtioURL = defaultVirtioWinURL
+	}
+	fmt.Printf("\n  Pulling VirtIO-Win drivers\n")
+	fmt.Printf("  Source : %s\n\n", virtioURL)
+	if err := downloadWithProgress(virtioURL, cached); err != nil {
+		fmt.Printf("  ⚠  VirtIO-Win download failed (%v) — Windows VM will boot without drivers\n", err)
+		return ""
+	}
+	fmt.Println("  ✓  VirtIO-Win drivers cached at", cached)
+	return cached
+}
+
+// writeTiny10Meta writes metadata.json and panespec.json for a tiny10 image.
+// virtioPath may be empty if the driver ISO is unavailable.
+func writeTiny10Meta(diskPath, virtioPath, targetDir string) {
+	source := defaultTiny10URL
+	if p := os.Getenv("TINY10_ISO_PATH"); p != "" {
+		source = "local://" + p
+	}
+	if u := os.Getenv("GITHUB_TINY10_URL"); u != "" {
+		source = u
+	}
+	meta := ImageMetadata{Name: "tiny10", Version: "23H2", VMM: "qemu", Source: source}
+	writeMetaJSON(targetDir, meta)
+
+	spec := DefaultProfile()
+	spec.VMM = PtrVMMType(VMMQemu)
+	spec.CPUs = PtrUint32(4)
+	spec.Memory = PtrString("4GiB")
+	spec.Disk = &DiskConfig{Path: PtrString(diskPath), Format: PtrDiskFormat(FormatRaw)}
+	spec.Drivers = &DriversConfig{VirtioNet: PtrBool(true), VirtioBlk: PtrBool(true), VirtioRng: PtrBool(false)}
+	if virtioPath != "" {
+		spec.ExtraArgs = []string{"-cdrom", virtioPath, "-vnc", ":1"}
+	} else {
+		spec.ExtraArgs = []string{"-vnc", ":1"}
+	}
+	writeSpecJSON(targetDir, spec)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Linux distro pull logic
+// ────────────────────────────────────────────────────────────────────────────
+
+func pullDistro(name string, entry distroEntry, diskPath, targetDir string) error {
+	printBanner(name, entry)
+
+	if err := downloadWithProgress(entry.url, diskPath); err != nil {
+		return fmt.Errorf("failed to download %s ISO: %w", name, err)
+	}
+
+	meta := ImageMetadata{Name: name, Version: entry.version, VMM: "qemu", Source: entry.url}
+	writeMetaJSON(targetDir, meta)
+
+	spec := DefaultProfile()
+	spec.VMM = PtrVMMType(VMMQemu)
+	spec.CPUs = PtrUint32(entry.cpus)
+	spec.Memory = PtrString(entry.memory)
+	spec.Disk = &DiskConfig{Path: PtrString(diskPath), Format: PtrDiskFormat(FormatRaw)}
+	spec.Drivers = &DriversConfig{VirtioNet: PtrBool(true), VirtioBlk: PtrBool(true), VirtioRng: PtrBool(false)}
+	writeSpecJSON(targetDir, spec)
+
+	fmt.Printf("\n✓  %s (%s) pulled and registered successfully!\n", name, entry.version)
+	return nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pretty download progress bar (no extra deps)
+// ────────────────────────────────────────────────────────────────────────────
+
+// progressWriter wraps an io.Writer and prints a live terminal progress bar.
+type progressWriter struct {
+	total      int64
+	written    int64
+	lastPrint  time.Time
+	barWidth   int
+	startTime  time.Time
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	pw.written += int64(n)
+	now := time.Now()
+	if now.Sub(pw.lastPrint) < 100*time.Millisecond && pw.written < pw.total {
+		return n, nil
+	}
+	pw.lastPrint = now
+	pw.printBar()
+	return n, nil
+}
+
+func (pw *progressWriter) printBar() {
+	elapsed := time.Since(pw.startTime).Seconds()
+	speed := float64(pw.written) / elapsed // bytes/s
+	speedStr := formatBytes(int64(speed)) + "/s"
+	doneStr := formatBytes(pw.written)
+	totalStr := "?"
+	if pw.total > 0 {
+		totalStr = formatBytes(pw.total)
+	}
+
+	var bar string
+	if pw.total > 0 {
+		pct := float64(pw.written) / float64(pw.total)
+		filled := int(pct * float64(pw.barWidth))
+		bar = "[" + strings.Repeat("█", filled) + strings.Repeat("░", pw.barWidth-filled) + "]"
+		fmt.Printf("\r  %s %3.0f%%  %s / %s  %s    ", bar, pct*100, doneStr, totalStr, speedStr)
+	} else {
+		fmt.Printf("\r  Downloading...  %s  %s    ", doneStr, speedStr)
+	}
+}
+
+func (pw *progressWriter) finish() {
+	pw.written = pw.total
+	pw.printBar()
+	fmt.Println()
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// httpClient is configured to:
+//   - Follow HTTP → HTTPS redirects (Go's default client blocks these by default
+//     when the scheme downgrades, but upgrades are always followed).
+//   - Send a browser-like User-Agent so servers like archive.org and
+//     fedorapeople.org serve the file instead of returning 403.
+var httpClient = &http.Client{
+	Timeout: 0, // no overall timeout — files can be many GiB
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		// Allow up to 15 redirects (archive.org uses 302 → CDN node).
+		if len(via) >= 15 {
+			return fmt.Errorf("too many redirects")
+		}
+		// Carry the User-Agent through all hops.
+		req.Header.Set("User-Agent", browserUA)
+		return nil
+	},
+}
+
+const browserUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+	"(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
+func downloadWithProgress(url, destPath string) error {
+	fmt.Printf("  Connecting to %s\n", url)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("bad URL: %w", err)
+	}
+	// Mimic a real browser enough to pass basic bot-checks.
+	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned HTTP %d for %s", resp.StatusCode, url)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("cannot create destination file: %w", err)
+	}
+	defer out.Close()
+
+	pw := &progressWriter{
+		total:     resp.ContentLength,
+		barWidth:  30,
+		startTime: time.Now(),
+		lastPrint: time.Now(),
+	}
+
+	reader := io.TeeReader(resp.Body, pw)
+	if _, err := io.Copy(out, reader); err != nil {
+		// Remove partial file so a retry starts clean.
+		_ = out.Close()
+		_ = os.Remove(destPath)
+		return fmt.Errorf("download interrupted: %w", err)
+	}
+	pw.finish()
+	return nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Generic metadata helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+func writeMetaJSON(targetDir string, meta ImageMetadata) {
+	data, _ := json.MarshalIndent(meta, "", "  ")
+	_ = os.WriteFile(filepath.Join(targetDir, "metadata.json"), data, 0644)
+}
+
+func writeSpecJSON(targetDir string, spec *PaneSpec) {
+	data, _ := json.MarshalIndent(spec, "", "  ")
+	_ = os.WriteFile(filepath.Join(targetDir, "panespec.json"), data, 0644)
+}
+
+func writeGenericMeta(name, source, diskPath, targetDir string) {
+	meta := ImageMetadata{Name: name, Version: "v1.0", VMM: "qemu", Source: source}
+	writeMetaJSON(targetDir, meta)
+	spec := DefaultProfile()
+	spec.VMM = PtrVMMType(VMMQemu)
+	spec.Disk = &DiskConfig{Path: PtrString(diskPath), Format: PtrDiskFormat(FormatRaw)}
+	writeSpecJSON(targetDir, spec)
+}
+
+func printBanner(name string, entry distroEntry) {
+	fmt.Printf("\n  Pulling %s %s\n", name, entry.version)
+	fmt.Printf("  Source : %s\n", entry.url)
+	fmt.Printf("  CPUs   : %d    Memory: %s\n\n", entry.cpus, entry.memory)
+}
+
+func listKnownDistros() string {
+	names := make([]string, 0, len(knownDistros))
+	for k := range knownDistros {
+		names = append(names, k)
+	}
+	// Sort for deterministic output.
+	for i := 0; i < len(names)-1; i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[i] > names[j] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ListImages / RemoveImage / InspectImage
+// ────────────────────────────────────────────────────────────────────────────
 
 func ListImages() ([]ImageInfo, error) {
 	dir := getImagesDir()
@@ -196,16 +545,16 @@ func ListImages() ([]ImageInfo, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		name := entry.Name()
-		vDir := filepath.Join(dir, name, "v1.0")
+		imgName := entry.Name()
+		vDir := filepath.Join(dir, imgName, "v1.0")
 		if _, err := os.Stat(vDir); os.IsNotExist(err) {
-			subEntries, err := os.ReadDir(filepath.Join(dir, name))
+			subEntries, err := os.ReadDir(filepath.Join(dir, imgName))
 			if err != nil || len(subEntries) == 0 {
 				continue
 			}
 			for _, sub := range subEntries {
 				if sub.IsDir() {
-					vDir = filepath.Join(dir, name, sub.Name())
+					vDir = filepath.Join(dir, imgName, sub.Name())
 					break
 				}
 			}
@@ -224,32 +573,36 @@ func ListImages() ([]ImageInfo, error) {
 		var size int64
 		files, _ := os.ReadDir(vDir)
 		for _, f := range files {
-			if !f.IsDir() {
-				fPath := filepath.Join(vDir, f.Name())
-				// Handle symlink
-				if info, err := os.Lstat(fPath); err == nil {
-					if info.Mode()&os.ModeSymlink != 0 {
-						if target, err := os.Readlink(fPath); err == nil {
-							if !filepath.IsAbs(target) {
-								target = filepath.Join(vDir, target)
-							}
-							if targetInfo, err := os.Stat(target); err == nil {
-								size = targetInfo.Size()
-								break
-							}
-						}
-					} else if strings.HasPrefix(f.Name(), "disk.") || strings.HasSuffix(f.Name(), ".iso") || strings.HasSuffix(f.Name(), ".raw") || strings.HasSuffix(f.Name(), ".qcow2") {
-						size = info.Size()
-						break
-					}
+			if f.IsDir() {
+				continue
+			}
+			fPath := filepath.Join(vDir, f.Name())
+			info, err := os.Lstat(fPath)
+			if err != nil {
+				continue
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(fPath)
+				if err != nil {
+					continue
 				}
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(vDir, target)
+				}
+				if targetInfo, err := os.Stat(target); err == nil {
+					size = targetInfo.Size()
+					break
+				}
+			} else if strings.HasPrefix(f.Name(), "disk.") ||
+				strings.HasSuffix(f.Name(), ".iso") ||
+				strings.HasSuffix(f.Name(), ".raw") ||
+				strings.HasSuffix(f.Name(), ".qcow2") {
+				size = info.Size()
+				break
 			}
 		}
 
-		list = append(list, ImageInfo{
-			Metadata: meta,
-			Size:     size,
-		})
+		list = append(list, ImageInfo{Metadata: meta, Size: size})
 	}
 	return list, nil
 }
@@ -293,40 +646,26 @@ func InspectImage(name string) (*PaneSpec, error) {
 	return ConfigValidate(specPath)
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Low-level file helpers
+// ────────────────────────────────────────────────────────────────────────────
+
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-
 	_, err = io.Copy(out, in)
 	return err
 }
 
-func downloadFile(url, filepath string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status code: %d", resp.StatusCode)
-	}
-
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
+// downloadFile is kept for internal backwards-compat (no progress bar).
+func downloadFile(url, filePath string) error {
+	return downloadWithProgress(url, filePath)
 }

@@ -67,11 +67,14 @@ pub unsafe extern "C" fn pane_core_spawn(
                 Err(e) => return error_to_errno(e),
             };
 
-            let qmp_socket_path = format!("/run/pane/qmp-{}.sock", id_str);
-            let qmp_path = std::path::Path::new(&qmp_socket_path);
-            if let Some(parent) = qmp_path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
+            let run_pane = std::path::Path::new("/run/pane");
+            let qmp_socket_path = if run_pane.exists() || std::fs::create_dir_all(run_pane).is_ok() {
+                format!("/run/pane/qmp-{}.sock", id_str)
+            } else {
+                let tmp_pane = std::path::Path::new("/tmp/pane");
+                let _ = std::fs::create_dir_all(tmp_pane);
+                format!("/tmp/pane/qmp-{}.sock", id_str)
+            };
 
             if let Err(e) = safe_vm.setup_qemu_mode(config, &qmp_socket_path) {
                 return error_to_errno(e);

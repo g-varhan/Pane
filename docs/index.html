@@ -1,969 +1,1129 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="dark light">
-  <meta name="description" content="Pane is a modular, high-performance hypervisor orchestration engine using KVM, io_uring, and eBPF. SQLite, but for VM management.">
-  <title>Pane — SQLite, but for VM Management</title>
-  
-  <!-- Font -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pane Documentation — SQLite, but for VMs</title>
+  <meta name="description" content="Complete reference documentation for Pane, the lean embeddable KVM VM lifecycle primitive for Linux x86_64." />
+  <meta name="keywords" content="pane, KVM, virtual machine, hypervisor, Linux, QEMU, Firecracker, MicroVM" />
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      /* Theme color tokens */
-      --bg-dark: oklch(14% 0.03 240);
-      --bg-card: oklch(18% 0.04 240 / 0.7);
-      --border-color: oklch(25% 0.05 240 / 0.6);
-      
-      --color-primary-light: oklch(65% 0.22 250);
-      --color-primary-dark: oklch(75% 0.18 250);
-      --color-primary: light-dark(var(--color-primary-light), var(--color-primary-dark));
-
-      --color-accent-cyan: oklch(78% 0.15 190);
-      --color-accent-emerald: oklch(76% 0.16 145);
-      
-      --text-main: light-dark(oklch(20% 0.02 240), oklch(92% 0.01 240));
-      --text-subtle: light-dark(oklch(45% 0.03 240), oklch(72% 0.02 240));
-      
-      color-scheme: dark light;
-      accent-color: var(--color-primary);
+      --bg:         #0d1117;
+      --bg2:        #161b22;
+      --bg3:        #1c2330;
+      --border:     #30363d;
+      --border2:    #21262d;
+      --text:       #e6edf3;
+      --text2:      #8b949e;
+      --text3:      #6e7681;
+      --accent:     #58a6ff;
+      --accent2:    #388bfd;
+      --green:      #3fb950;
+      --orange:     #d29922;
+      --red:        #f85149;
+      --purple:     #bc8cff;
+      --cyan:       #39d3f5;
+      --yellow:     #e3b341;
+      --sidebar-w:  280px;
+      --header-h:   64px;
+      --radius:     8px;
+      --code-bg:    #161b22;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    html { scroll-behavior: smooth; }
 
     body {
-      font-family: 'Outfit', sans-serif;
-      background-color: var(--bg-dark);
-      color: var(--text-main);
-      line-height: 1.6;
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
       overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
     }
 
-    /* Selection styling */
-    ::selection {
-      background-color: var(--color-primary);
-      color: var(--bg-dark);
-    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 
-    /* Scrollbar */
-    :root {
-      --scrollbar-track: oklch(12% 0.03 240);
-      --scrollbar-thumb: oklch(30% 0.05 240);
-      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-    }
-
-    /* Container */
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 2rem;
-    }
-
-    /* Header / Nav */
     header {
-      padding: 2rem 0;
-      border-bottom: 1px solid var(--border-color);
+      position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+      background: rgba(13,17,23,0.92);
       backdrop-filter: blur(12px);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background-color: oklch(14% 0.03 240 / 0.8);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; z-index: 100;
     }
 
-    .nav-wrapper {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .logo-group {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-weight: 800;
-      font-size: 1.75rem;
-      letter-spacing: -0.05em;
-      background: linear-gradient(135deg, var(--color-primary-dark), var(--color-accent-cyan));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 2rem;
-    }
-
-    .nav-links a {
-      color: var(--text-subtle);
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      font-weight: 700; font-size: 18px; color: var(--text);
       text-decoration: none;
-      font-weight: 500;
-      font-size: 0.95rem;
-      transition: color 0.2s ease;
     }
 
-    .nav-links a:hover {
-      color: var(--color-primary);
-    }
-
-    .github-link {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      border: 1px solid var(--border-color);
-      padding: 0.5rem 1rem;
-      border-radius: 9999px;
-      background-color: oklch(18% 0.04 240 / 0.5);
-      transition: all 0.2s ease;
-    }
-
-    .github-link:hover {
-      background-color: oklch(22% 0.05 240 / 0.8);
-      border-color: var(--color-primary);
-      transform: translateY(-1px);
-    }
-
-    /* Hero Section */
-    .hero-section {
-      padding: 6rem 0 4rem;
-      text-align: center;
-      position: relative;
-    }
-
-    .hero-bg-glow {
-      position: absolute;
-      top: 10%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 600px;
-      height: 300px;
-      background: radial-gradient(circle, oklch(40% 0.2 250 / 0.15) 0%, transparent 70%);
-      filter: blur(40px);
-      pointer-events: none;
-      z-index: -1;
-    }
-
-    .tagline-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.35rem 1rem;
-      border-radius: 9999px;
-      background-color: oklch(22% 0.05 240 / 0.6);
-      border: 1px solid var(--border-color);
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--color-accent-cyan);
-      margin-bottom: 2rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    h1 {
-      font-size: 4rem;
-      font-weight: 800;
-      line-height: 1.1;
-      letter-spacing: -0.03em;
-      margin-bottom: 1.5rem;
-      background: linear-gradient(to right bottom, #fff 40%, oklch(80% 0.02 240));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .hero-description {
-      font-size: 1.35rem;
-      color: var(--text-subtle);
-      max-width: 700px;
-      margin: 0 auto 3rem;
-      font-weight: 300;
-      text-wrap: pretty;
-    }
-
-    .cta-group {
-      display: flex;
-      justify-content: center;
-      gap: 1rem;
-      margin-bottom: 4rem;
-    }
-
-    .btn {
-      font-family: inherit;
-      font-weight: 600;
-      font-size: 1rem;
-      padding: 0.85rem 1.75rem;
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #388bfd, #bc8cff);
       border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .btn-primary {
-      background-color: var(--color-primary);
-      color: var(--bg-dark);
-      border: none;
-      box-shadow: 0 4px 20px oklch(65% 0.22 250 / 0.3);
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 24px oklch(65% 0.22 250 / 0.45);
-      filter: brightness(1.1);
-    }
-
-    .btn-secondary {
-      background-color: oklch(18% 0.04 240 / 0.6);
-      color: var(--text-main);
-      border: 1px solid var(--border-color);
-    }
-
-    .btn-secondary:hover {
-      background-color: oklch(22% 0.05 240 / 0.8);
-      border-color: var(--text-subtle);
-      transform: translateY(-2px);
-    }
-
-    /* Curl Installation Block */
-    .install-bar {
-      max-width: 600px;
-      margin: 0 auto 5rem;
-      background-color: oklch(10% 0.03 240);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 0.75rem 1.25rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: white;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.9rem;
-      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+      box-shadow: 0 0 20px rgba(56,139,253,0.3);
     }
 
-    .install-code {
-      color: var(--color-accent-cyan);
-      user-select: all;
+    .header-badges { display: flex; gap: 8px; align-items: center; }
+
+    .badge {
+      padding: 3px 10px; border-radius: 100px; font-size: 12px;
+      font-weight: 500; border: 1px solid;
+    }
+    .badge-green  { color: var(--green);  border-color: var(--green);  background: rgba(63,185,80,0.08); }
+    .badge-blue   { color: var(--accent); border-color: var(--accent); background: rgba(88,166,255,0.08); }
+    .badge-orange { color: var(--orange); border-color: var(--orange); background: rgba(210,153,34,0.08); }
+
+    .header-search {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 12px; cursor: pointer;
+      color: var(--text3); font-size: 13px;
+      transition: border-color 0.2s;
+    }
+    .header-search:hover { border-color: var(--accent); }
+
+    .layout { display: flex; margin-top: var(--header-h); min-height: calc(100vh - var(--header-h)); }
+
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0;
+      position: fixed; top: var(--header-h); left: 0;
+      height: calc(100vh - var(--header-h));
+      overflow-y: auto; overflow-x: hidden;
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+      padding: 20px 0;
+    }
+
+    .sidebar-group {
+      padding: 6px 16px 2px;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text3);
+      margin-top: 12px;
+    }
+
+    .sidebar-link {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 16px; text-decoration: none;
+      color: var(--text2); font-size: 13.5px;
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .sidebar-link:hover, .sidebar-link.active {
+      color: var(--text); background: var(--bg2);
+      border-left-color: var(--accent);
+    }
+    .sidebar-link .icon { font-size: 14px; opacity: 0.7; width: 16px; }
+
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      max-width: 900px;
+      padding: 48px 48px 96px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(56,139,253,0.08) 0%, rgba(188,140,255,0.06) 50%, rgba(57,211,245,0.05) 100%);
+      border: 1px solid rgba(56,139,253,0.2);
+      border-radius: 16px;
+      padding: 40px 48px;
+      margin-bottom: 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: 0; right: 0; left: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent2), var(--purple), var(--cyan));
+    }
+
+    .hero-ascii {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; line-height: 1.4;
+      color: var(--accent); margin-bottom: 16px;
+      opacity: 0.8;
+    }
+
+    .hero h1 { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .hero p { color: var(--text2); font-size: 16px; max-width: 560px; margin-bottom: 24px; }
+    .hero-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .chip {
+      padding: 4px 12px; border-radius: 100px; font-size: 12px;
+      font-weight: 500; font-family: 'JetBrains Mono', monospace;
+    }
+    .chip-c      { background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.2); }
+    .chip-rust   { background: rgba(210,153,34,0.12); color: var(--orange); border: 1px solid rgba(210,153,34,0.2); }
+    .chip-go     { background: rgba(57,211,245,0.12); color: var(--cyan);   border: 1px solid rgba(57,211,245,0.2); }
+    .chip-kvm    { background: rgba(63,185,80,0.12);  color: var(--green);  border: 1px solid rgba(63,185,80,0.2); }
+
+    section { margin-bottom: 56px; }
+    h1, h2, h3, h4 { color: var(--text); font-weight: 600; }
+    h2 {
+      font-size: 22px; margin-bottom: 20px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    h2 .h-icon { font-size: 20px; }
+    h3 {
+      font-size: 16px; font-weight: 600;
+      margin: 28px 0 12px; color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      display: flex; align-items: center; gap: 8px;
+    }
+    h3::before { content: '\25B8'; opacity: 0.5; }
+    h4 { font-size: 14px; margin: 16px 0 8px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    p { color: var(--text2); margin-bottom: 12px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .code-block {
+      position: relative;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin: 16px 0;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border2);
+    }
+
+    .code-lang {
+      font-size: 11px; color: var(--text3); font-family: 'JetBrains Mono', monospace;
+      font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
     }
 
     .copy-btn {
-      background: none;
-      border: none;
-      color: var(--text-subtle);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      transition: color 0.2s ease;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text3); padding: 2px 10px; border-radius: 4px;
+      font-size: 11px; cursor: pointer; font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--text2); }
+    .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+    pre {
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.65;
     }
 
-    .copy-btn:hover {
-      color: var(--color-primary);
-    }
-
-    /* Terminal Demo / Interactive Playground */
-    .terminal-container {
-      max-width: 800px;
-      margin: 0 auto 6rem;
-      background-color: oklch(10% 0.03 240);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-      overflow: hidden;
-      text-align: left;
-    }
-
-    .terminal-header {
-      background-color: oklch(15% 0.03 240);
-      padding: 0.75rem 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .terminal-buttons {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .terminal-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
-    .td-red { background-color: #ff5f56; }
-    .td-yellow { background-color: #ffbd2e; }
-    .td-green { background-color: #27c93f; }
-
-    .terminal-title {
-      font-size: 0.8rem;
-      color: var(--text-subtle);
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .terminal-body {
-      padding: 1.5rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.9rem;
-      min-height: 320px;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      overflow-y: auto;
-    }
-
-    .terminal-line {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .prompt-symbol {
-      color: var(--color-primary);
-      user-select: none;
-    }
-
-    .cmd-text {
-      color: #fff;
-    }
-
-    .output-text {
-      color: var(--text-subtle);
-    }
-
-    .success-text {
-      color: var(--color-accent-emerald);
-    }
-
-    .info-text {
-      color: var(--color-accent-cyan);
-    }
-
-    /* Primitives / Grid */
-    .primitives-title {
-      text-align: center;
-      margin-bottom: 3rem;
-    }
-
-    .primitives-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 2rem;
-      margin-bottom: 8rem;
-    }
-
-    .primitive-card {
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 2rem;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-      backdrop-filter: blur(8px);
-    }
-
-    .primitive-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 2px;
-      background: linear-gradient(to right, transparent, var(--color-primary), transparent);
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-
-    .primitive-card:hover {
-      transform: translateY(-4px);
-      border-color: var(--color-primary);
-      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
-    }
-
-    .primitive-card:hover::before {
-      opacity: 1;
-    }
-
-    .primitive-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
-    .primitive-name {
-      font-size: 1.5rem;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      color: #fff;
-    }
-
-    .primitive-latency {
-      background-color: oklch(25% 0.1 145 / 0.2);
-      border: 1px solid oklch(60% 0.15 145 / 0.4);
-      color: var(--color-accent-emerald);
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .primitive-desc {
-      color: var(--text-subtle);
-      font-size: 0.95rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .primitive-details {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
-      border-top: 1px solid var(--border-color);
-      padding-top: 1rem;
-    }
-
-    .detail-item {
-      display: flex;
-      justify-content: space-between;
-    }
-
-    .detail-label {
-      color: var(--text-subtle);
-    }
-
-    .detail-val {
-      color: var(--color-accent-cyan);
-    }
-
-    /* Core Technologies Stack */
-    .stack-section {
-      padding: 6rem 0;
-      background-color: oklch(11% 0.03 240);
-      border-top: 1px solid var(--border-color);
-      border-bottom: 1px solid var(--border-color);
-      margin-bottom: 8rem;
-    }
-
-    .stack-header {
-      text-align: center;
-      margin-bottom: 4rem;
-    }
-
-    .stack-header h2 {
-      font-size: 2.5rem;
-      font-weight: 800;
-      margin-bottom: 1rem;
-    }
-
-    .stack-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 2.5rem;
-    }
-
-    .stack-card {
-      text-align: left;
-    }
-
-    .stack-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 8px;
-      background-color: oklch(20% 0.05 250);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 1.5rem;
-      border: 1px solid var(--border-color);
-      color: var(--color-primary);
-    }
-
-    .stack-card h3 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 0.75rem;
-    }
-
-    .stack-card p {
-      color: var(--text-subtle);
-      font-size: 0.95rem;
-    }
-
-    /* Footer */
-    footer {
-      padding: 4rem 0;
-      border-top: 1px solid var(--border-color);
-      color: var(--text-subtle);
-      font-size: 0.9rem;
-      text-align: center;
-    }
-
-    .footer-links {
-      display: flex;
-      justify-content: center;
-      gap: 2rem;
-      margin-bottom: 2rem;
-    }
-
-    .footer-links a {
-      color: var(--text-subtle);
-      text-decoration: none;
-      transition: color 0.2s ease;
-    }
-
-    .footer-links a:hover {
-      color: var(--color-primary);
-    }
-
-    /* Code styling in text */
     code {
       font-family: 'JetBrains Mono', monospace;
-      background-color: oklch(18% 0.04 240);
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      font-size: 0.85em;
-      border: 1px solid var(--border-color);
+      font-size: 13px;
     }
 
-    /* Responsive adjustments */
+    .sh-comment  { color: var(--text3); }
+    .sh-keyword  { color: var(--purple); }
+    .sh-string   { color: var(--green); }
+    .sh-cmd      { color: var(--cyan); }
+    .sh-flag     { color: var(--yellow); }
+    .sh-var      { color: var(--orange); }
+
+    p code, li code {
+      background: var(--bg3); border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 4px; font-size: 12.5px;
+      color: var(--accent);
+    }
+
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 13.5px;
+    }
+
+    th {
+      background: var(--bg3); color: var(--text); font-weight: 600;
+      padding: 10px 14px; text-align: left;
+      border-bottom: 2px solid var(--border);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 9px 14px; border-bottom: 1px solid var(--border2);
+      color: var(--text2); vertical-align: top;
+    }
+
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    td code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-size: 12px; color: var(--accent); }
+
+    .primitives { display: grid; grid-template-columns: repeat(5,1fr); gap: 1px; margin: 16px 0; background: var(--border); border-radius: var(--radius); overflow: hidden; }
+    .prim { background: var(--bg2); padding: 16px 12px; text-align: center; transition: background 0.2s; }
+    .prim:hover { background: var(--bg3); }
+    .prim-name { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--cyan); margin-bottom: 4px; }
+    .prim-lat  { font-size: 18px; font-weight: 700; color: var(--text); }
+    .prim-unit { font-size: 11px; color: var(--text3); }
+    .prim-desc { font-size: 11px; color: var(--text3); margin-top: 4px; line-height: 1.4; }
+
+    .alert {
+      padding: 12px 16px; border-radius: 6px; margin: 16px 0;
+      font-size: 13.5px; border-left: 3px solid;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .alert-tip  { background: rgba(63,185,80,0.08);  border-color: var(--green);  color: #7ee787; }
+    .alert-warn { background: rgba(210,153,34,0.08); border-color: var(--orange); color: #d29922; }
+    .alert-info { background: rgba(88,166,255,0.08); border-color: var(--accent); color: var(--accent); }
+
+    .distro-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .distro-pill {
+      padding: 6px 14px; border-radius: 100px;
+      background: var(--bg2); border: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      color: var(--text2); cursor: default; transition: all 0.15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .distro-pill:hover { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.06); }
+    .distro-pill .ram  { font-size: 10px; color: var(--text3); }
+
+    .progress-demo {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 12px 16px; margin: 12px 0;
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    }
+    .pb-bar { color: var(--accent); }
+    .pb-pct { color: var(--yellow); }
+    .pb-size { color: var(--green); }
+    .pb-speed { color: var(--text2); }
+
+    .bench { margin: 8px 0; }
+    .bench-row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+    .bench-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text2); width: 200px; flex-shrink: 0; }
+    .bench-bar-wrap { flex: 1; background: var(--bg3); border-radius: 100px; height: 6px; overflow: hidden; }
+    .bench-bar { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--accent2), var(--cyan)); transition: width 1s ease; }
+    .bench-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--green); width: 80px; text-align: right; flex-shrink: 0; }
+
+    .env-name { color: var(--orange); font-family: 'JetBrains Mono', monospace; }
+
+    ul, ol { padding-left: 20px; color: var(--text2); margin: 8px 0 12px; }
+    li { margin-bottom: 4px; }
+
+    footer {
+      margin-left: var(--sidebar-w);
+      border-top: 1px solid var(--border);
+      padding: 24px 48px;
+      display: flex; align-items: center; justify-content: space-between;
+      color: var(--text3); font-size: 13px;
+    }
+
     @media (max-width: 768px) {
-      h1 {
-        font-size: 2.75rem;
-      }
-      .hero-description {
-        font-size: 1.15rem;
-      }
-      .nav-links {
-        display: none;
-      }
+      .sidebar { display: none; }
+      .main, footer { margin-left: 0; padding: 24px 20px 64px; }
+      .primitives { grid-template-columns: repeat(2,1fr); }
+      .hero { padding: 24px; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Nav -->
-  <header>
-    <div class="container nav-wrapper">
-      <div class="logo-group">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-primary)">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <line x1="9" y1="3" x2="9" y2="21"/>
-          <line x1="9" y1="9" x2="21" y2="9"/>
-          <line x1="9" y1="15" x2="21" y2="15"/>
-        </svg>
-        Pane
-      </div>
-      <nav class="nav-links">
-        <a href="#features">Primitives</a>
-        <a href="#technology">Tech Stack</a>
-        <a href="getstarted.html">Get Started</a>
-        <a href="test.html">Testing Guide</a>
-      </nav>
-      <a href="https://github.com/g-varhan/Pane" class="github-link" target="_blank" rel="noopener noreferrer">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-main);">
-          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
-        </svg>
-        <span style="color: var(--text-main); font-weight: 500; font-size: 0.9rem;">GitHub</span>
-      </a>
+<header>
+  <a class="logo" href="#">
+    <div class="logo-icon">P</div>
+    Pane
+  </a>
+  <div class="header-badges">
+    <span class="badge badge-green">v0.2.0</span>
+    <span class="badge badge-blue">Linux x86_64</span>
+    <span class="badge badge-orange">Apache-2.0</span>
+  </div>
+  <div class="header-search">
+    <span>&#x2328;</span> <span>Press Ctrl+F to search</span>
+  </div>
+</header>
+
+<div class="layout">
+
+<nav class="sidebar">
+  <div class="sidebar-group">Overview</div>
+  <a class="sidebar-link active" href="#intro"><span class="icon">&#x1F3E0;</span>What is Pane?</a>
+  <a class="sidebar-link" href="#architecture"><span class="icon">&#x1F3D7;</span>Architecture</a>
+  <a class="sidebar-link" href="#install"><span class="icon">&#x2699;</span>Installation</a>
+  <a class="sidebar-link" href="#uninstall"><span class="icon">&#x1F5D1;</span>Uninstallation</a>
+
+  <div class="sidebar-group">Daemon</div>
+  <a class="sidebar-link" href="#daemon"><span class="icon">&#x1F50C;</span>daemon start/stop</a>
+  <a class="sidebar-link" href="#daemon-systemd"><span class="icon">&#x26A1;</span>systemd service</a>
+
+  <div class="sidebar-group">Images</div>
+  <a class="sidebar-link" href="#pull"><span class="icon">&#x2B07;</span>pull</a>
+  <a class="sidebar-link" href="#images"><span class="icon">&#x1F5BC;</span>images</a>
+  <a class="sidebar-link" href="#image-inspect"><span class="icon">&#x1F50D;</span>image inspect</a>
+  <a class="sidebar-link" href="#rmi"><span class="icon">&#x1F5D1;</span>rmi</a>
+
+  <div class="sidebar-group">VM Lifecycle</div>
+  <a class="sidebar-link" href="#run"><span class="icon">&#x25B6;</span>run</a>
+  <a class="sidebar-link" href="#ps"><span class="icon">&#x1F4CB;</span>ps</a>
+  <a class="sidebar-link" href="#exec"><span class="icon">&#x1F4BB;</span>exec</a>
+  <a class="sidebar-link" href="#stop"><span class="icon">&#x23F9;</span>stop</a>
+  <a class="sidebar-link" href="#rm"><span class="icon">&#x1F4A5;</span>rm</a>
+  <a class="sidebar-link" href="#logs"><span class="icon">&#x1F4DC;</span>logs</a>
+  <a class="sidebar-link" href="#inspect"><span class="icon">&#x1F50E;</span>inspect</a>
+
+  <div class="sidebar-group">Snapshots</div>
+  <a class="sidebar-link" href="#snapshot"><span class="icon">&#x1F4F8;</span>snapshot</a>
+  <a class="sidebar-link" href="#fork"><span class="icon">&#x1F500;</span>fork</a>
+
+  <div class="sidebar-group">Reference</div>
+  <a class="sidebar-link" href="#panespec"><span class="icon">&#x1F4C4;</span>PaneSpec JSON</a>
+  <a class="sidebar-link" href="#distros"><span class="icon">&#x1F427;</span>Linux Distros</a>
+  <a class="sidebar-link" href="#windows"><span class="icon">&#x1FA9F;</span>Windows (tiny10)</a>
+  <a class="sidebar-link" href="#envvars"><span class="icon">&#x1F527;</span>Environment Vars</a>
+  <a class="sidebar-link" href="#grpc"><span class="icon">&#x1F4E1;</span>gRPC SDK</a>
+  <a class="sidebar-link" href="#usecases"><span class="icon">&#x1F680;</span>Use Cases</a>
+  <a class="sidebar-link" href="#troubleshoot"><span class="icon">&#x1F6E0;</span>Troubleshooting</a>
+  <a class="sidebar-link" href="#benchmarks"><span class="icon">&#x26A1;</span>Benchmarks</a>
+</nav>
+
+<main class="main">
+
+  <!-- Hero -->
+  <div class="hero" id="intro">
+    <div class="hero-ascii">
+&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2557;  &#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2557; &#x2588;&#x2588;&#x2588;&#x2557;   &#x2588;&#x2588;&#x2557;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2557;<br>
+&#x2588;&#x2588;&#x2554;&#x2550;&#x2550;&#x2588;&#x2588;&#x2557;&#x2588;&#x2588;&#x2554;&#x2550;&#x2550;&#x2588;&#x2588;&#x2557;&#x2588;&#x2588;&#x2588;&#x2588;&#x2557;  &#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2554;&#x2550;&#x2550;&#x2550;&#x2550;&#x255D;<br>
+&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2554;&#x255D;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2554;&#x2588;&#x2588;&#x2557; &#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2557;<br>
+&#x2588;&#x2588;&#x2554;&#x2550;&#x2550;&#x2550;&#x255D; &#x2588;&#x2588;&#x2554;&#x2550;&#x2550;&#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2551;&#x255A;&#x2588;&#x2588;&#x2557;&#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2554;&#x2550;&#x2550;&#x255D;<br>
+&#x2588;&#x2588;&#x2551;     &#x2588;&#x2588;&#x2551;  &#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2551; &#x255A;&#x2588;&#x2588;&#x2588;&#x2588;&#x2551;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2557;<br>
+&#x255A;&#x2550;&#x255D;     &#x255A;&#x2550;&#x255D;  &#x255A;&#x2550;&#x255D;&#x255A;&#x2550;&#x255D;  &#x255A;&#x2550;&#x2550;&#x2550;&#x255D;&#x255A;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x255D;
     </div>
-  </header>
+    <h1>SQLite, but for VMs</h1>
+    <p>A lean, embeddable KVM VM lifecycle primitive for Linux x86_64. Five primitives. Maximum speed. No platforms, no dashboards, no cloud lock-in.</p>
+    <div class="hero-chips">
+      <span class="chip chip-c">pane-vmm &middot; C &middot; KVM</span>
+      <span class="chip chip-rust">pane-core &middot; Rust &middot; io_uring</span>
+      <span class="chip chip-go">pane-api &middot; Go &middot; gRPC</span>
+      <span class="chip chip-kvm">Linux x86_64 &middot; KVM required</span>
+    </div>
+  </div>
 
-  <!-- Hero Section -->
-  <main class="container">
-    <section class="hero-section">
-      <div class="hero-bg-glow"></div>
-      <div class="tagline-badge">
-        <span class="terminal-dot td-green"></span>
-        v0.1.0 Released — Apache 2.0 Licensed
-      </div>
-      <h1>SQLite, but for Virtual Machines</h1>
-      <p class="hero-description">
-        Pane is a modular, zero-dependency KVM hypervisor orchestration engine. It does exactly five things faster and more reliably than anything else on Linux. Link it directly into your own platforms.
-      </p>
-      
-      <div class="cta-group">
-        <a href="getstarted.html" class="btn btn-primary">
-          Get Started
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </a>
-        <a href="https://github.com/g-varhan/Pane" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">View GitHub Source</a>
-      </div>
+  <!-- Five Primitives -->
+  <div class="primitives">
+    <div class="prim"><div class="prim-name">spawn</div><div class="prim-lat">0.83<span class="prim-unit">ms</span></div><div class="prim-desc">Boot a VM from an image</div></div>
+    <div class="prim"><div class="prim-name">exec</div><div class="prim-lat">8.6<span class="prim-unit">ms</span></div><div class="prim-desc">Run cmd inside VM</div></div>
+    <div class="prim"><div class="prim-name">snapshot</div><div class="prim-lat">78<span class="prim-unit">ms</span></div><div class="prim-desc">Freeze RAM to disk</div></div>
+    <div class="prim"><div class="prim-name">fork</div><div class="prim-lat">34<span class="prim-unit">ms</span></div><div class="prim-desc">CoW-clone a snapshot</div></div>
+    <div class="prim"><div class="prim-name">destroy</div><div class="prim-lat">12<span class="prim-unit">ms</span></div><div class="prim-desc">Kill VM, zero leaks</div></div>
+  </div>
 
-      <!-- Installation Bar -->
-      <div class="install-bar">
-        <span class="install-code">curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | sh</span>
-        <button class="copy-btn" id="copyBtn" title="Copy to clipboard">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>
-        </button>
-      </div>
+  <!-- Architecture -->
+  <section id="architecture">
+    <h2><span class="h-icon">&#x1F3D7;</span>Architecture</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span></div>
+      <pre><code>+======================================================+
+|              pane-cli   +   pane-api                 |  Go
+|    cobra CLI  |  gRPC server  |  CGo FFI to core     |
++======================================================+
+|               pane-core  (orchestration)             |  Rust
+|   VM state machine  |  cgroup v2  |  eBPF  |  snaps  |
++======================================================+
+|                pane-vmm  (VMM layer)                 |  C
+|   /dev/kvm ioctls  |  vCPU run loop  |  io_uring     |
++======================================================+</code></pre>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Language</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>pane-vmm</code></td><td>C</td><td>KVM ioctls, vCPU run loop, io_uring disk I/O, Firecracker &amp; QEMU backends</td></tr>
+          <tr><td><code>pane-core</code></td><td>Rust</td><td>VM state machine (typestate), cgroup v2 limits, eBPF network segmentation, snapshot/fork</td></tr>
+          <tr><td><code>pane-api/cli</code></td><td>Go</td><td>gRPC daemon, CGo FFI into Rust, CLI (cobra)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 
-      <!-- Terminal Playground -->
-      <div class="terminal-container">
-        <div class="terminal-header">
-          <div class="terminal-buttons">
-            <span class="terminal-dot td-red"></span>
-            <span class="terminal-dot td-yellow"></span>
-            <span class="terminal-dot td-green"></span>
-          </div>
-          <div class="terminal-title">pane-api.service</div>
-          <div style="width: 50px;"></div>
-        </div>
-        <div class="terminal-body" id="terminal">
-          <div class="terminal-line">
-            <span class="prompt-symbol">$</span>
-            <span class="cmd-text">pane daemon start</span>
-          </div>
-          <div class="output-text">Starting Pane daemon on UNIX socket: /run/pane.sock</div>
-        </div>
-      </div>
-    </section>
+  <!-- Installation -->
+  <section id="install">
+    <h2><span class="h-icon">&#x2699;</span>Installation</h2>
 
-    <!-- Primitives Grid -->
-    <section id="features" class="primitives-section">
-      <div class="primitives-title">
-        <h2 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem;">The Five Primitives</h2>
-        <p style="color: var(--text-subtle); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
-          Pane v0.1.0 implements exactly five VM lifecycle operations. Performance is a hard gate enforced by CI.
-        </p>
-      </div>
+    <h3>One-liner</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | bash</code></pre>
+    </div>
 
-      <div class="primitives-grid">
-        <!-- Spawn -->
-        <div class="primitive-card">
-          <div class="primitive-header">
-            <span class="primitive-name">spawn</span>
-            <span class="primitive-latency">0.83 ms</span>
-          </div>
-          <p class="primitive-desc">
-            Instantly boots a microVM container directly into 64-bit Long Mode, skipping bios/real-mode boot cycles.
-          </p>
-          <div class="primitive-details">
-            <div class="detail-item">
-              <span class="detail-label">Target Latency</span>
-              <span class="detail-val">&lt; 5.00 ms</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Backend</span>
-              <span class="detail-val">Firecracker / QEMU</span>
-            </div>
-          </div>
-        </div>
+    <h3>Options</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Custom install prefix</span>
+curl -fsSL .../install.sh | bash -s -- --prefix=/opt/pane
 
-        <!-- Exec -->
-        <div class="primitive-card">
-          <div class="primitive-header">
-            <span class="primitive-name">exec</span>
-            <span class="primitive-latency">8.60 ms</span>
-          </div>
-          <p class="primitive-desc">
-            Executes commands inside the VM via guest vsock socket mapping with real-time stdout/stderr chunk streaming.
-          </p>
-          <div class="primitive-details">
-            <div class="detail-item">
-              <span class="detail-label">Target Latency</span>
-              <span class="detail-val">&lt; 10.00 ms</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Transport</span>
-              <span class="detail-val">AF_VSOCK (Port 1024)</span>
-            </div>
-          </div>
-        </div>
+<span class="sh-comment"># Skip dependency install</span>
+curl -fsSL .../install.sh | bash -s -- --skip-deps
 
-        <!-- Snapshot -->
-        <div class="primitive-card">
-          <div class="primitive-header">
-            <span class="primitive-name">snapshot</span>
-            <span class="primitive-latency">78.00 ms</span>
-          </div>
-          <p class="primitive-desc">
-            Pauses execution and captures guest RAM pages along with exact vCPU register configurations to disk.
-          </p>
-          <div class="primitive-details">
-            <div class="detail-item">
-              <span class="detail-label">Target Latency</span>
-              <span class="detail-val">&lt; 100.00 ms</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Scope</span>
-              <span class="detail-val">Up to 4GB RAM</span>
-            </div>
-          </div>
-        </div>
+<span class="sh-comment"># Don't install the systemd daemon</span>
+curl -fsSL .../install.sh | bash -s -- --no-daemon
 
-        <!-- Fork -->
-        <div class="primitive-card">
-          <div class="primitive-header">
-            <span class="primitive-name">fork</span>
-            <span class="primitive-latency">34.00 ms</span>
-          </div>
-          <p class="primitive-desc">
-            Clones a VM from a snapshot using Linux filesystem reflinks and MAP_PRIVATE memory sharing.
-          </p>
-          <div class="primitive-details">
-            <div class="detail-item">
-              <span class="detail-label">Target Latency</span>
-              <span class="detail-val">&lt; 50.00 ms</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Performance</span>
-              <span class="detail-val">50 parallel VMs / 1.6s</span>
-            </div>
-          </div>
-        </div>
+<span class="sh-comment"># Local clone</span>
+git clone https://github.com/g-varhan/Pane.git &amp;&amp; bash Pane/install.sh</code></pre>
+    </div>
 
-        <!-- Destroy -->
-        <div class="primitive-card">
-          <div class="primitive-header">
-            <span class="primitive-name">destroy</span>
-            <span class="primitive-latency">12.00 ms</span>
-          </div>
-          <p class="primitive-desc">
-            Terminates execution, frees mapping layers, removes Unix sockets, and cleans up cgroups with zero resource leaks.
-          </p>
-          <div class="primitive-details">
-            <div class="detail-item">
-              <span class="detail-label">Target Latency</span>
-              <span class="detail-val">&lt; 50.00 ms</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">FD Leak Test</span>
-              <span class="detail-val">0 leaks after 1000 runs</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+    <h3>Requirements</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Requirement</th><th>Minimum</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Linux kernel</td><td>5.15+</td><td>Tested on 6.x</td></tr>
+          <tr><td>Architecture</td><td>x86_64</td><td>ARM planned</td></tr>
+          <tr><td>KVM</td><td>Required</td><td>Enable Intel VT-x / AMD-V in BIOS</td></tr>
+          <tr><td>Go</td><td>1.21+</td><td>CGo must be enabled</td></tr>
+          <tr><td>Rust</td><td>1.70+</td><td>Stable toolchain</td></tr>
+          <tr><td>QEMU</td><td>7.0+</td><td>For Windows/ISO VMs</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-    <!-- Pane v0.2 Features Section -->
-    <section id="v0.2-features" class="primitives-section" style="border-top: 1px solid var(--border-color); padding-top: 5rem; margin-top: 5rem;">
-      <div class="primitives-title">
-        <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-primary); margin-bottom: 0.5rem; display: block;">NEW IN V0.2</span>
-        <h2 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem;">Unified Control Plane & Container Compatibility</h2>
-        <p style="color: var(--text-subtle); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
-          Pane v0.2 introduces a unified CLI dispatcher, dynamic configuration, and OCI/Docker container compatibility.
-        </p>
-      </div>
+    <h3>Supported distributions</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Distribution</th><th>Pkg Manager</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Arch Linux</td><td>pacman</td><td style="color:var(--green)">&#x2705; Supported</td></tr>
+          <tr><td>Ubuntu 22.04 / 24.04</td><td>apt</td><td style="color:var(--green)">&#x2705; Supported</td></tr>
+          <tr><td>Debian 12 (Bookworm)</td><td>apt</td><td style="color:var(--green)">&#x2705; Supported</td></tr>
+          <tr><td>Fedora 41</td><td>dnf</td><td style="color:var(--green)">&#x2705; Supported</td></tr>
+          <tr><td>Rocky / AlmaLinux 9</td><td>dnf</td><td style="color:var(--green)">&#x2705; Supported</td></tr>
+          <tr><td>openSUSE Leap 15.6</td><td>zypper</td><td style="color:var(--green)">&#x2705; Supported</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="alert alert-tip"><span class="alert-icon">&#x1F4A1;</span><span>Verify KVM: <code>ls -l /dev/kvm</code>. If needed: <code>sudo usermod -aG kvm $USER</code></span></div>
+  </section>
 
-      <div class="primitives-grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
-        <!-- Unified CLI -->
-        <div class="primitive-card" style="padding: 2rem;">
-          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">Unified Cobra CLI Dispatcher</h3>
-          <p class="primitive-desc" style="margin-bottom: 0;">
-            Manage the lifecycle of the API daemon (<code>pane daemon start</code>) and direct VM operations (<code>pane run</code>, <code>pane exec</code>) through a single unified binary. Falls back automatically to direct FFI-embedded in-process execution when the daemon is offline.
-          </p>
-        </div>
+  <!-- Uninstall -->
+  <section id="uninstall">
+    <h2><span class="h-icon">&#x1F5D1;</span>Uninstallation</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Preserve images and snapshots (safe default)</span>
+curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/uninstall.sh | bash
 
-        <!-- Dynamic Config -->
-        <div class="primitive-card" style="padding: 2rem;">
-          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">Dynamic QEMU Config Builder</h3>
-          <p class="primitive-desc" style="margin-bottom: 0;">
-            No more hardcoded C arguments. Merges CLI flags, configuration YAML files, cached metadata, and default profiles dynamically. Supports raw argument passthrough (<code>-- &lt;args...&gt;</code>) and VNC/display settings via simple flags.
-          </p>
-        </div>
+<span class="sh-comment"># Remove EVERYTHING including images and snapshots</span>
+bash uninstall.sh --purge
 
-        <!-- Scoped Pull -->
-        <div class="primitive-card" style="padding: 2rem;">
-          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">Cached Image Cache & Scoped Pull</h3>
-          <p class="primitive-desc" style="margin-bottom: 0;">
-            Fetch and manage virtual machines or container images from standard manifests, Docker Hub registries, HTTP URLs, or local filesystems. Emits clean <code>metadata.json</code> and default <code>panespec.json</code> configurations automatically.
-          </p>
-        </div>
+<span class="sh-comment"># Custom prefix</span>
+bash uninstall.sh --purge --prefix=/opt/pane</code></pre>
+    </div>
+    <div class="alert alert-warn"><span class="alert-icon">&#x26A0;</span><span><code>--purge</code> permanently deletes all images in <code>/var/lib/pane</code>. Without it, images and snapshots are kept.</span></div>
+  </section>
 
-        <!-- Container Compatibility -->
-        <div class="primitive-card" style="padding: 2rem;">
-          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">OCI/Docker Container VM Compatibility</h3>
-          <p class="primitive-desc" style="margin-bottom: 0;">
-            Flatten Docker layers, inject a static C-based <code>init</code> binary (PID 1) and guest agent, format to raw ext4 disks via host <code>mke2fs</code>, and boot directly via Firecracker/QEMU kernel direct booting with full cgroups v2 boundaries.
-          </p>
-        </div>
-      </div>
-    </section>
-  </main>
+  <!-- Daemon -->
+  <section id="daemon">
+    <h2><span class="h-icon">&#x1F50C;</span>Daemon Management</h2>
+    <p>Pane runs as a gRPC daemon on <code>/run/pane.sock</code>. The CLI auto-starts it if not running.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane daemon start                   <span class="sh-comment"># Start daemon</span>
+pane daemon start --socket /tmp/my.sock
+pane daemon stop                    <span class="sh-comment"># Stop daemon</span>
+pane daemon status                  <span class="sh-comment"># Check status</span></code></pre>
+    </div>
 
-  <!-- Core Tech Stack -->
-  <section id="technology" class="stack-section">
-    <div class="container">
-      <div class="stack-header">
-        <h2>Technology & Performance Stack</h2>
-        <p style="color: var(--text-subtle); max-width: 600px; margin: 0 auto; font-size: 1.1rem;">
-          Pane utilizes modern Linux kernel primitives for maximum throughput and isolation.
-        </p>
-      </div>
-
-      <div class="stack-grid">
-        <!-- io_uring -->
-        <div class="stack-card">
-          <div class="stack-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="12" x2="2" y2="12"/>
-              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
-              <line x1="6" y1="16" x2="6.01" y2="16"/>
-              <line x1="10" y1="16" x2="10.01" y2="16"/>
-            </svg>
-          </div>
-          <h3>Asynchronous I/O via io_uring</h3>
-          <p>
-            The `virtio-blk` device MMIO path integrates with a dedicated `io_uring` ring to execute storage operations asynchronously, achieving over <strong>3,100 MB/s</strong> read speeds (a 199% boost over sync pread).
-          </p>
-        </div>
-
-        <!-- eBPF -->
-        <div class="stack-card">
-          <div class="stack-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              <path d="M2 17l10 5 10-5"/>
-              <path d="M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          <h3>eBPF TC Ingress Classifier</h3>
-          <p>
-            Implements zero-rules micro-segmentation. Using the Rust `aya` loader, a BPF map matches source/destination VM IPs and blocks unauthorized group crossings directly in the kernel network path with zero host overhead.
-          </p>
-        </div>
-
-        <!-- cgroup v2 -->
-        <div class="stack-card">
-          <div class="stack-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="7" height="9"/>
-              <rect x="14" y="3" width="7" height="5"/>
-              <rect x="14" y="12" width="7" height="9"/>
-              <rect x="3" y="16" width="7" height="5"/>
-            </svg>
-          </div>
-          <h3>cgroup v2 Resource Caps</h3>
-          <p>
-            Automatically manages CPU weight scheduler configurations, OOM memory ceilings, and process limit counts per VM, trapping guest out-of-memory states inside local groups without impacting host services.
-          </p>
-        </div>
-
-        <!-- CGo FFI -->
-        <div class="stack-card">
-          <div class="stack-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 18l6-6-6-6"/>
-              <path d="M8 6L2 12l6 6"/>
-              <line x1="10" y1="18" x2="14" y2="6"/>
-            </svg>
-          </div>
-          <h3>Stateless CGo gRPC Server</h3>
-          <p>
-            Links the core Rust static archive `libpane_core.a` with Go. Allows scalable goroutines to manage gRPC execution requests asynchronously while keeping VM records stateless on the API host.
-          </p>
-        </div>
+    <div id="daemon-systemd" style="margin-top:24px;">
+      <h3>systemd service</h3>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><code>sudo systemctl start   pane     <span class="sh-comment"># Start</span>
+sudo systemctl stop    pane     <span class="sh-comment"># Stop</span>
+sudo systemctl restart pane     <span class="sh-comment"># Restart</span>
+sudo systemctl enable  pane     <span class="sh-comment"># Auto-start on boot</span>
+sudo systemctl status  pane     <span class="sh-comment"># Status</span>
+journalctl -u pane -f           <span class="sh-comment"># Follow logs</span></code></pre>
       </div>
     </div>
   </section>
 
-  <!-- Footer -->
-  <footer>
-    <div class="container">
-      <div class="footer-links">
-        <a href="#features">Primitives</a>
-        <a href="#technology">Technology</a>
-        <a href="getstarted.html">Developer Guide</a>
-        <a href="https://github.com/g-varhan/Pane">GitHub</a>
-      </div>
-      <p>© 2026 Pane Hypervisor Project. Released under the Apache 2.0 License.</p>
+  <!-- Pull -->
+  <section id="pull">
+    <h2><span class="h-icon">&#x2B07;</span>pane pull</h2>
+    <p>Download a distribution ISO and register it as a Pane image.</p>
+
+    <h3>Built-in Linux distros</h3>
+    <div class="distro-grid">
+      <div class="distro-pill">alpine <span class="ram">512 MiB</span></div>
+      <div class="distro-pill">ubuntu <span class="ram">2 GiB</span></div>
+      <div class="distro-pill">ubuntu-desktop <span class="ram">4 GiB</span></div>
+      <div class="distro-pill">ubuntu-minimal <span class="ram">1 GiB</span></div>
+      <div class="distro-pill">debian <span class="ram">1 GiB</span></div>
+      <div class="distro-pill">debian-live <span class="ram">2 GiB</span></div>
+      <div class="distro-pill">fedora <span class="ram">2 GiB</span></div>
+      <div class="distro-pill">fedora-workstation <span class="ram">4 GiB</span></div>
+      <div class="distro-pill">arch <span class="ram">1 GiB</span></div>
+      <div class="distro-pill">kali <span class="ram">2 GiB</span></div>
+      <div class="distro-pill">rocky <span class="ram">2 GiB</span></div>
+      <div class="distro-pill">alma <span class="ram">2 GiB</span></div>
+      <div class="distro-pill">opensuse <span class="ram">2 GiB</span></div>
     </div>
-  </footer>
 
-  <!-- Script for Interactive Terminal Demo & Copy Button -->
-  <script>
-    // Copy Button functionality
-    const copyBtn = document.getElementById('copyBtn');
-    copyBtn.addEventListener('click', () => {
-      const code = 'curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | sh';
-      navigator.clipboard.writeText(code).then(() => {
-        copyBtn.style.color = 'var(--color-accent-emerald)';
-        setTimeout(() => {
-          copyBtn.style.color = 'var(--text-subtle)';
-        }, 1500);
-      });
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane pull alpine
+pane pull ubuntu
+pane pull ubuntu-desktop
+pane pull debian
+pane pull fedora
+pane pull arch
+pane pull kali
+pane pull rocky
+pane pull alma
+pane pull opensuse
+
+<span class="sh-comment"># Custom HTTP URL</span>
+pane pull https://example.com/mylinux.iso
+
+<span class="sh-comment"># Windows (auto-downloads tiny10 + VirtIO drivers)</span>
+pane pull tiny10</code></pre>
+    </div>
+
+    <h3>Live download progress</h3>
+    <div class="progress-demo">
+  Pulling ubuntu v24.04<br>
+  Source : https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso<br><br>
+  Connecting to https://releases.ubuntu.com/...<br>
+  <span class="pb-bar">[&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;&#x2591;]</span> <span class="pb-pct">42%</span>  <span class="pb-size">820.4 MiB / 1.9 GiB</span>  <span class="pb-speed">18.2 MiB/s</span><br><br>
+  <span style="color:var(--green)">&#x2713;  ubuntu (v24.04) pulled and registered successfully!</span>
+    </div>
+  </section>
+
+  <!-- images -->
+  <section id="images">
+    <h2><span class="h-icon">&#x1F5BC;</span>pane images</h2>
+    <p>List all pulled images.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane images</code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">output</span></div>
+      <pre><code>NAME              VERSION   VMM    SIZE       SOURCE
+alpine            v3.21     qemu   196 MiB    https://dl-cdn.alpinelinux.org/...
+ubuntu            v24.04    qemu   1.9 GiB    https://releases.ubuntu.com/...
+tiny10            23H2      qemu   1.8 GiB    https://archive.org/...</code></pre>
+    </div>
+  </section>
+
+  <!-- image inspect -->
+  <section id="image-inspect">
+    <h2><span class="h-icon">&#x1F50D;</span>pane image inspect</h2>
+    <p>Show the default <code>panespec.json</code> config for an image.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane image inspect ubuntu
+pane image inspect tiny10</code></pre>
+    </div>
+  </section>
+
+  <!-- rmi -->
+  <section id="rmi">
+    <h2><span class="h-icon">&#x1F5D1;</span>pane rmi</h2>
+    <p>Remove a pulled image from disk.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane rmi alpine
+pane rmi ubuntu</code></pre>
+    </div>
+  </section>
+
+  <!-- run -->
+  <section id="run">
+    <h2><span class="h-icon">&#x25B6;</span>pane run</h2>
+    <p>Boot a VM from a pulled image or explicit parameters.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Simplest usage</span>
+pane run alpine
+
+<span class="sh-comment"># Override resources</span>
+pane run ubuntu <span class="sh-flag">--cpus</span> 4 <span class="sh-flag">--memory</span> 4GiB
+
+<span class="sh-comment"># Assign a name</span>
+pane run alpine <span class="sh-flag">--name</span> my-sandbox
+
+<span class="sh-comment"># Desktop with VNC</span>
+pane run ubuntu-desktop <span class="sh-flag">--gui</span>
+
+<span class="sh-comment"># Firecracker MicroVM mode</span>
+pane run <span class="sh-flag">--kernel</span> /boot/vmlinuz <span class="sh-flag">--cmdline</span> "console=ttyS0 root=/dev/vda"
+
+<span class="sh-comment"># PaneSpec config file</span>
+pane run <span class="sh-flag">-f</span> /path/to/myvm.json
+
+<span class="sh-comment"># Dry run</span>
+pane run <span class="sh-flag">--dry-run</span> ubuntu</code></pre>
+    </div>
+
+    <h3>Flags</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>--name</code></td><td>string</td><td>auto-ID</td><td>Human-readable VM name</td></tr>
+          <tr><td><code>--cpus</code></td><td>uint</td><td>from image</td><td>Number of virtual CPUs</td></tr>
+          <tr><td><code>--memory</code></td><td>string</td><td>from image</td><td>RAM: <code>256MiB</code>, <code>2GiB</code></td></tr>
+          <tr><td><code>--disk-size</code></td><td>string</td><td>&#x2014;</td><td>Create blank writable disk</td></tr>
+          <tr><td><code>--iso</code></td><td>string</td><td>&#x2014;</td><td>Path to boot ISO</td></tr>
+          <tr><td><code>--kernel</code></td><td>string</td><td>&#x2014;</td><td>Linux kernel (Firecracker mode)</td></tr>
+          <tr><td><code>--cmdline</code></td><td>string</td><td>&#x2014;</td><td>Kernel command-line args</td></tr>
+          <tr><td><code>--gui</code></td><td>bool</td><td>false</td><td>Enable VNC on port 5901</td></tr>
+          <tr><td><code>--no-virtio-net</code></td><td>bool</td><td>false</td><td>Disable VirtIO network</td></tr>
+          <tr><td><code>-f, --config</code></td><td>string</td><td>&#x2014;</td><td>Load PaneSpec JSON file</td></tr>
+          <tr><td><code>--dry-run</code></td><td>bool</td><td>false</td><td>Print spec, don't boot</td></tr>
+          <tr><td><code>--standalone</code></td><td>bool</td><td>false</td><td>Bypass daemon (direct FFI)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ps -->
+  <section id="ps">
+    <h2><span class="h-icon">&#x1F4CB;</span>pane ps</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane ps</code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">output</span></div>
+      <pre><code>ID              IMAGE    STATUS   CPUs  MEMORY  PID    UPTIME
+my-sandbox      alpine   running  1     512MiB  18432  5m 12s
+build-runner-1  ubuntu   running  4     4GiB    18891  2m 04s</code></pre>
+    </div>
+  </section>
+
+  <!-- exec -->
+  <section id="exec">
+    <h2><span class="h-icon">&#x1F4BB;</span>pane exec</h2>
+    <p>Run a command inside a running VM via vsock. Latency: <strong>&lt; 10 ms p99</strong>.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane exec my-sandbox uname -a
+pane exec my-sandbox sh -c "apt update &amp;&amp; apt install -y curl"
+pane exec my-sandbox cat /etc/os-release
+
+<span class="sh-comment"># Pipe stdin</span>
+echo "hello" | pane exec my-sandbox cat -</code></pre>
+    </div>
+  </section>
+
+  <!-- stop / rm / logs / inspect -->
+  <section id="stop">
+    <h2><span class="h-icon">&#x23F9;</span>stop &middot; rm &middot; logs &middot; inspect</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Gracefully stop</span>
+pane stop my-sandbox
+
+<span class="sh-comment"># Destroy (kill + reclaim resources)</span>
+pane rm my-sandbox
+
+<span class="sh-comment"># View serial output</span>
+pane logs my-sandbox
+pane logs -f my-sandbox   <span class="sh-comment"># Follow</span>
+
+<span class="sh-comment"># Full runtime state JSON</span>
+pane inspect my-sandbox</code></pre>
+    </div>
+  </section>
+
+  <!-- snapshot -->
+  <section id="snapshot">
+    <h2><span class="h-icon">&#x1F4F8;</span>pane snapshot</h2>
+    <p>Freeze running VM RAM + vCPU state to disk in <strong>&lt; 100 ms</strong> (4 GB VM).</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane snapshot my-sandbox
+
+<span class="sh-comment"># Resume from snapshot</span>
+pane run --snapshot /var/lib/pane/snapshots/my-sandbox alpine</code></pre>
+    </div>
+  </section>
+
+  <!-- fork -->
+  <section id="fork">
+    <h2><span class="h-icon">&#x1F500;</span>pane fork</h2>
+    <p>Clone a snapshot into new VMs using Linux reflinks (CoW). <strong>50 clones in &lt; 2 seconds</strong>.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pane fork my-sandbox clone-1
+pane fork my-sandbox clone-1 clone-2 clone-3
+
+<span class="sh-comment"># 50 parallel clones</span>
+for i in $(seq 1 50); do
+  pane fork my-sandbox worker-$i &amp;
+done
+wait</code></pre>
+    </div>
+  </section>
+
+  <!-- PaneSpec -->
+  <section id="panespec">
+    <h2><span class="h-icon">&#x1F4C4;</span>PaneSpec JSON</h2>
+    <p>Full VM configuration format. Use with <code>pane run -f myvm.json</code>.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>{
+  "vmm": "qemu",
+  "cpus": 2,
+  "memory": "2GiB",
+  "disk": {
+    "path": "/var/lib/pane/images/ubuntu/v1.0/disk.iso",
+    "format": "raw",
+    "size": "20GiB"
+  },
+  "drivers": {
+    "virtio_net": true,
+    "virtio_blk": true,
+    "virtio_rng": false
+  },
+  "network": {
+    "tap_device": "pane0",
+    "mac": "52:54:00:12:34:56"
+  },
+  "resources": {
+    "cpu_quota": 50,
+    "memory_max": "2GiB",
+    "pids_max": 512
+  },
+  "extra_args": ["-vnc", ":1", "-cdrom", "/path/to/drivers.iso"],
+  "kernel": {
+    "path": "/boot/vmlinuz",
+    "cmdline": "console=ttyS0 reboot=k panic=1 pci=off"
+  }
+}</code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Validate a config file</span>
+pane config validate myvm.json
+
+<span class="sh-comment"># Show default profile</span>
+pane config show</code></pre>
+    </div>
+  </section>
+
+  <!-- Distros -->
+  <section id="distros">
+    <h2><span class="h-icon">&#x1F427;</span>Linux Distros Reference</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Version</th><th>RAM</th><th>CPUs</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td><code>alpine</code></td><td>3.21</td><td>512 MiB</td><td>1</td><td>dl-cdn.alpinelinux.org</td></tr>
+          <tr><td><code>ubuntu</code></td><td>24.04 LTS</td><td>2 GiB</td><td>2</td><td>releases.ubuntu.com</td></tr>
+          <tr><td><code>ubuntu-desktop</code></td><td>24.04 LTS</td><td>4 GiB</td><td>2</td><td>releases.ubuntu.com</td></tr>
+          <tr><td><code>ubuntu-minimal</code></td><td>24.04 LTS</td><td>1 GiB</td><td>1</td><td>releases.ubuntu.com</td></tr>
+          <tr><td><code>debian</code></td><td>12 Bookworm</td><td>1 GiB</td><td>1</td><td>cdimage.debian.org</td></tr>
+          <tr><td><code>debian-live</code></td><td>12 GNOME</td><td>2 GiB</td><td>2</td><td>cdimage.debian.org</td></tr>
+          <tr><td><code>fedora</code></td><td>41 Server</td><td>2 GiB</td><td>2</td><td>download.fedoraproject.org</td></tr>
+          <tr><td><code>fedora-workstation</code></td><td>41</td><td>4 GiB</td><td>2</td><td>download.fedoraproject.org</td></tr>
+          <tr><td><code>arch</code></td><td>rolling</td><td>1 GiB</td><td>1</td><td>geo.mirror.pkgbuild.com</td></tr>
+          <tr><td><code>kali</code></td><td>2024.4</td><td>2 GiB</td><td>2</td><td>cdimage.kali.org</td></tr>
+          <tr><td><code>rocky</code></td><td>9.4</td><td>2 GiB</td><td>2</td><td>download.rockylinux.org</td></tr>
+          <tr><td><code>alma</code></td><td>9.4</td><td>2 GiB</td><td>2</td><td>repo.almalinux.org</td></tr>
+          <tr><td><code>opensuse</code></td><td>Leap 15.6</td><td>2 GiB</td><td>2</td><td>download.opensuse.org</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Windows -->
+  <section id="windows">
+    <h2><span class="h-icon">&#x1FA9F;</span>Windows (tiny10)</h2>
+    <p><code>pane pull tiny10</code> auto-downloads from archive.org + VirtIO drivers from Fedora CDN. VNC on port 5901.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Auto-download (~4 GB total)</span>
+pane pull tiny10
+
+<span class="sh-comment"># Boot and connect VNC</span>
+pane run tiny10
+vncviewer localhost:5901
+
+<span class="sh-comment"># Use local ISO</span>
+<span class="sh-var">TINY10_ISO_PATH</span>=/path/to/tiny10.iso pane pull tiny10
+
+<span class="sh-comment"># Use GitHub Release asset</span>
+<span class="sh-var">GITHUB_TINY10_URL</span>=https://github.com/YOU/pane-images/releases/download/v1/tiny10.iso \
+  pane pull tiny10</code></pre>
+    </div>
+
+    <h3>GitHub hosting for teams</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Upload once</span>
+gh release create v23h2 /path/to/tiny10.iso \
+  --repo YOUR_ORG/pane-images --title "tiny10 23H2"
+
+<span class="sh-comment"># Team members pull via env var</span>
+export <span class="sh-var">GITHUB_TINY10_URL</span>=https://github.com/YOUR_ORG/pane-images/releases/download/v23h2/tiny10.iso
+pane pull tiny10</code></pre>
+    </div>
+  </section>
+
+  <!-- Env vars -->
+  <section id="envvars">
+    <h2><span class="h-icon">&#x1F527;</span>Environment Variables</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="env-name">PANE_SOCKET</span></td><td>/run/pane.sock</td><td>Daemon UNIX socket path</td></tr>
+          <tr><td><span class="env-name">PANE_IMAGES_DIR</span></td><td>/var/lib/pane/images</td><td>Image storage directory</td></tr>
+          <tr><td><span class="env-name">TINY10_ISO_PATH</span></td><td>~/Documents/disk/...</td><td>Local tiny10 ISO path</td></tr>
+          <tr><td><span class="env-name">GITHUB_TINY10_URL</span></td><td>&#x2014;</td><td>URL to download tiny10</td></tr>
+          <tr><td><span class="env-name">VIRTIO_WIN_ISO</span></td><td>&#x2014;</td><td>Local VirtIO-Win ISO path</td></tr>
+          <tr><td><span class="env-name">VIRTIO_WIN_URL</span></td><td>Fedora CDN</td><td>URL to download VirtIO drivers</td></tr>
+          <tr><td><span class="env-name">CGO_ENABLED</span></td><td>1</td><td>Must be 1 for Pane</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- gRPC -->
+  <section id="grpc">
+    <h2><span class="h-icon">&#x1F4E1;</span>gRPC SDK (Go)</h2>
+    <p>Embed Pane directly in your Go service.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">go</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>conn, _ := grpc.Dial("unix:///run/pane.sock",
+    grpc.WithTransportCredentials(insecure.NewCredentials()))
+client := pb.NewPaneServiceClient(conn)
+
+ctx := context.Background()
+
+// Spawn a VM
+resp, _ := client.Spawn(ctx, &amp;pb.SpawnRequest{
+    Id:       "my-vm",
+    SpecJson: `{"vmm":"qemu","cpus":2,"memory":"2GiB"}`,
+})
+log.Printf("PID=%d, VsockCID=%d", resp.Pid, resp.VsockCid)
+
+// Exec a command
+out, _ := client.Exec(ctx, &amp;pb.ExecRequest{
+    Id:  "my-vm",
+    Cmd: []string{"uname", "-a"},
+})
+
+// Snapshot + fork 10 clones
+client.Snapshot(ctx, &amp;pb.SnapshotRequest{Id: "my-vm"})
+for i := 0; i &lt; 10; i++ {
+    client.Fork(ctx, &amp;pb.ForkRequest{
+        SourceId: "my-vm",
+        NewId:    fmt.Sprintf("worker-%d", i),
+    })
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- Use cases -->
+  <section id="usecases">
+    <h2><span class="h-icon">&#x1F680;</span>Advanced Use Cases</h2>
+
+    <h3>Serverless Sandbox (E2B / Modal pattern)</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># 1. Boot golden VM, install deps</span>
+pane run alpine --name golden
+pane exec golden sh -c "apk add python3 &amp;&amp; pip install numpy"
+
+<span class="sh-comment"># 2. Snapshot warm state</span>
+pane snapshot golden
+
+<span class="sh-comment"># 3. Fork 50 workers (&lt; 2s total)</span>
+for i in $(seq 1 50); do pane fork golden worker-$i &amp;; done; wait
+
+<span class="sh-comment"># 4. Distribute work</span>
+for i in $(seq 1 50); do pane exec worker-$i python3 /tasks/task-$i.py &amp;; done; wait
+
+<span class="sh-comment"># 5. Destroy all</span>
+for i in $(seq 1 50); do pane rm worker-$i; done</code></pre>
+    </div>
+
+    <h3>CI Runners</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>JOB_ID="ci-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+pane run ubuntu --name "$JOB_ID" --cpus 4 --memory 8GiB
+pane exec "$JOB_ID" bash /repo/.github/scripts/build.sh
+EXIT_CODE=$?
+pane rm "$JOB_ID"
+exit $EXIT_CODE</code></pre>
+    </div>
+
+    <h3>Security Research</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Clean baseline</span>
+pane run debian --name clean-debian
+pane snapshot clean-debian
+
+<span class="sh-comment"># Analyze sample in a disposable clone</span>
+pane fork clean-debian analysis-run-1
+pane exec analysis-run-1 bash -c "cd /malware &amp;&amp; ./run.sh"
+pane rm analysis-run-1</code></pre>
+    </div>
+  </section>
+
+  <!-- Troubleshooting -->
+  <section id="troubleshoot">
+    <h2><span class="h-icon">&#x1F6E0;</span>Troubleshooting</h2>
+
+    <h3>/dev/kvm: Permission denied</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>sudo usermod -aG kvm $USER
+newgrp kvm   <span class="sh-comment"># or log out and back in</span></code></pre>
+    </div>
+
+    <h3>Daemon won't start</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>pgrep -x pane
+sudo rm -f /run/pane.sock /tmp/pane.sock
+pane daemon start</code></pre>
+    </div>
+
+    <h3>libpane_core.a not found</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>cd pane-core &amp;&amp; cargo build --release
+sudo cp target/release/libpane_core.a /usr/local/lib/
+sudo ldconfig</code></pre>
+    </div>
+
+    <h3>VNC not connecting</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code>ss -tlnp | grep 590        <span class="sh-comment"># Verify port 5901</span>
+pane inspect tiny10        <span class="sh-comment"># Check extra_args</span>
+vncviewer localhost:5901</code></pre>
+    </div>
+
+    <h3>Download fails with HTTP 403</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><code><span class="sh-comment"># Download manually and register locally</span>
+wget -O /tmp/myimage.iso https://example.com/image.iso
+<span class="sh-var">TINY10_ISO_PATH</span>=/tmp/myimage.iso pane pull tiny10</code></pre>
+    </div>
+  </section>
+
+  <!-- Benchmarks -->
+  <section id="benchmarks">
+    <h2><span class="h-icon">&#x26A1;</span>Performance Benchmarks</h2>
+    <p>CI gates &#x2014; regressions block merges.</p>
+    <div class="bench">
+      <div class="bench-row">
+        <div class="bench-label">spawn (Firecracker)</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="98%" style="width:0"></div></div>
+        <div class="bench-val">0.83 ms</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">spawn (QEMU/tiny10)</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="30%" style="width:0"></div></div>
+        <div class="bench-val">2.1 s</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">exec round-trip</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="86%" style="width:0"></div></div>
+        <div class="bench-val">8.6 ms</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">snapshot (4 GB VM)</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="78%" style="width:0"></div></div>
+        <div class="bench-val">78 ms</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">fork (single)</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="66%" style="width:0"></div></div>
+        <div class="bench-val">34 ms</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">fork (50x parallel)</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="80%" style="width:0"></div></div>
+        <div class="bench-val">1.6 s</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">destroy</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="24%" style="width:0"></div></div>
+        <div class="bench-val">12 ms</div>
+      </div>
+      <div class="bench-row">
+        <div class="bench-label">FD leak (1000 VMs)</div>
+        <div class="bench-bar-wrap"><div class="bench-bar" data-w="100%" style="width:0; background: var(--green)"></div></div>
+        <div class="bench-val" style="color:var(--green)">0 leaks</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<footer>
+  <span>Pane &middot; Built on Linux KVM &middot; Apache-2.0</span>
+  <span><a href="https://github.com/g-varhan/Pane">GitHub &#x2197;</a></span>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    var pre = btn.closest('.code-block').querySelector('pre');
+    var text = pre.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
     });
+  }
 
-    // Terminal Demo simulation
-    const terminal = document.getElementById('terminal');
-    const demoSteps = [
-      { delay: 1000, type: 'input', cmd: 'pane run --name web-vm-01 alpine-latest' },
-      { delay: 400, type: 'info', text: 'Connecting to daemon...' },
-      { delay: 600, type: 'success', text: 'VM web-vm-01 booted successfully! PID: 12895 | Vsock CID: 3' },
-      
-      { delay: 1500, type: 'input', cmd: 'pane exec web-vm-01 -- uname -a' },
-      { delay: 300, type: 'output', text: 'Linux guest-os 5.15.0-v8 #1 SMP PREEMPT x86_64 GNU/Linux' },
-      { delay: 100, type: 'success', text: 'Command executed successfully | Exit Code: 0' },
-      
-      { delay: 1500, type: 'input', cmd: 'pane snapshot web-vm-01' },
-      { delay: 200, type: 'info', text: 'Taking snapshot of VM web-vm-01 (tag: latest)...' },
-      { delay: 700, type: 'success', text: 'Snapshot completed successfully!' },
-      
-      { delay: 1200, type: 'input', cmd: 'pane fork web-vm-01 --count 1 --prefix web-vm-02' },
-      { delay: 300, type: 'info', text: 'Forking clone 1 of 1: ID=web-vm-02-1, CID=11...' },
-      { delay: 500, type: 'success', text: 'Clone web-vm-02-1 forked successfully! PID: 13012' },
-      
-      { delay: 1800, type: 'input', cmd: 'pane rm web-vm-01' },
-      { delay: 200, type: 'info', text: 'Destroying VM web-vm-01...' },
-      { delay: 400, type: 'success', text: 'VM web-vm-01 destroyed successfully.' }
-    ];
-
-    let stepIndex = 0;
-
-    function runNextStep() {
-      if (stepIndex >= demoSteps.length) {
-        // Restart demo after a pause
-        setTimeout(() => {
-          terminal.innerHTML = `
-            <div class="terminal-line">
-              <span class="prompt-symbol">$</span>
-              <span class="cmd-text">pane daemon start</span>
-            </div>
-            <div class="output-text">Starting Pane daemon on UNIX socket: /run/pane.sock</div>
-          `;
-          stepIndex = 0;
-          runNextStep();
-        }, 5000);
-        return;
+  // Active sidebar link tracking
+  var links = document.querySelectorAll('.sidebar-link');
+  var sections = document.querySelectorAll('section[id], div[id]');
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) {
+        links.forEach(function(l) { l.classList.remove('active'); });
+        var active = document.querySelector('.sidebar-link[href="#' + e.target.id + '"]');
+        if (active) active.classList.add('active');
       }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(function(s) { observer.observe(s); });
 
-      const step = demoSteps[stepIndex];
-      setTimeout(() => {
-        const line = document.createElement('div');
-        if (step.type === 'input') {
-          line.className = 'terminal-line';
-          line.innerHTML = `
-            <span class="prompt-symbol">$</span>
-            <span class="cmd-text">${step.cmd}</span>
-          `;
-        } else {
-          line.innerHTML = `<span class="${step.type}-text">${step.text || step.cmd}</span>`;
-        }
-        terminal.appendChild(line);
-        terminal.scrollTop = terminal.scrollHeight;
-        
-        stepIndex++;
-        runNextStep();
-      }, step.delay);
-    }
-
-    // Start simulation
-    runNextStep();
-  </script>
+  // Animate benchmark bars on scroll
+  var benchObs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) {
+        var bars = e.target.querySelectorAll('.bench-bar');
+        bars.forEach(function(b, i) {
+          var w = b.getAttribute('data-w');
+          if (w) {
+            setTimeout(function() { b.style.width = w; }, i * 100);
+          }
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+  var benchSection = document.querySelector('#benchmarks');
+  if (benchSection) benchObs.observe(benchSection);
+</script>
 </body>
 </html>

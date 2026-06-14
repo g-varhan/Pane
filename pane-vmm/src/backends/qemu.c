@@ -216,6 +216,14 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, cons
     }
 
     if (pid == 0) {
+        // Redirect stdin, stdout, stderr to /dev/null to prevent SIGPIPE when parent exits
+        int dev_null = open("/dev/null", O_RDWR);
+        if (dev_null >= 0) {
+            dup2(dev_null, 0);
+            dup2(dev_null, 1);
+            dup2(dev_null, 2);
+            close(dev_null);
+        }
         // Child process: execute QEMU
         execvp("qemu-system-x86_64", qa->argv);
         perror("execvp qemu-system-x86_64");
@@ -281,6 +289,8 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, cons
         return -EPROTO;
     }
 
+    close(client_fd);
+    vm->qmp_fd = -1;
     return 0;
 }
 

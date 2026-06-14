@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -23,20 +24,27 @@ type PaneServer struct {
 
 // Spawn handles booting a new microVM instance
 func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.SpawnResponse, error) {
-	if req.Id == "" || req.KernelPath == "" || req.RootfsPath == "" {
-		return nil, status.Error(codes.InvalidArgument, "id, kernel_path, and rootfs_path cannot be empty")
-	}
-
-	spec := &panespec.PaneSpec{
-		VMM:    panespec.PtrVMMType(panespec.VMMFirecracker),
-		CPUs:   panespec.PtrUint32(req.VcpuCount),
-		Memory: panespec.PtrString(fmt.Sprintf("%dMiB", req.MemSizeMib)),
-		Disk: &panespec.DiskConfig{
-			Path:   panespec.PtrString(req.RootfsPath),
-			Format: panespec.PtrDiskFormat(panespec.FormatRaw),
-		},
-		Kernel:  panespec.PtrString(req.KernelPath),
-		Cmdline: panespec.PtrString(req.BootArgs),
+	var spec *panespec.PaneSpec
+	if req.SpecJson != "" {
+		spec = &panespec.PaneSpec{}
+		if err := json.Unmarshal([]byte(req.SpecJson), spec); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "failed to parse spec_json: %v", err)
+		}
+	} else {
+		if req.Id == "" || req.KernelPath == "" || req.RootfsPath == "" {
+			return nil, status.Error(codes.InvalidArgument, "id, kernel_path, and rootfs_path cannot be empty")
+		}
+		spec = &panespec.PaneSpec{
+			VMM:    panespec.PtrVMMType(panespec.VMMFirecracker),
+			CPUs:   panespec.PtrUint32(req.VcpuCount),
+			Memory: panespec.PtrString(fmt.Sprintf("%dMiB", req.MemSizeMib)),
+			Disk: &panespec.DiskConfig{
+				Path:   panespec.PtrString(req.RootfsPath),
+				Format: panespec.PtrDiskFormat(panespec.FormatRaw),
+			},
+			Kernel:  panespec.PtrString(req.KernelPath),
+			Cmdline: panespec.PtrString(req.BootArgs),
+		}
 	}
 
 	cid, pid, err := ffi.Spawn(req.Id, spec)

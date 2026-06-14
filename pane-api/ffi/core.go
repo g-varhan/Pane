@@ -106,22 +106,25 @@ func Spawn(id string, spec *panespec.PaneSpec) (uint32, uint32, error) {
 		defer C.free(unsafe.Pointer(cfg.cmdline))
 	}
 
-	// extra_args: slice of CStrings
-	var cExtraArgs []*C.char
+	// extra_args: C-allocated array of CStrings
 	if len(spec.ExtraArgs) > 0 {
-		for _, arg := range spec.ExtraArgs {
-			cExtraArgs = append(cExtraArgs, C.CString(arg))
-		}
-		cExtraArgs = append(cExtraArgs, nil) // Null terminator
-		cfg.extra_args = (**C.char)(unsafe.Pointer(&cExtraArgs[0]))
+		cArraySize := C.size_t(len(spec.ExtraArgs) + 1) * C.size_t(unsafe.Sizeof((*C.char)(nil)))
+		cArray := C.malloc(cArraySize)
+		cfg.extra_args = (**C.char)(cArray)
 
-		// Defer freeing of extra args
+		cSlice := unsafe.Slice((**C.char)(cArray), len(spec.ExtraArgs)+1)
+		for i, arg := range spec.ExtraArgs {
+			cSlice[i] = C.CString(arg)
+		}
+		cSlice[len(spec.ExtraArgs)] = nil // Null-terminate
+
 		defer func() {
-			for _, arg := range cExtraArgs {
-				if arg != nil {
-					C.free(unsafe.Pointer(arg))
+			for _, ptr := range cSlice {
+				if ptr != nil {
+					C.free(unsafe.Pointer(ptr))
 				}
 			}
+			C.free(cArray)
 		}()
 	}
 

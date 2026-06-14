@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"pane/pane-api/ffi"
 	"pane/pane-api/panespec"
@@ -81,6 +82,11 @@ func (c *GrpcClient) Spawn(ctx context.Context, id string, spec *panespec.PaneSp
 		}
 	}
 
+	specJson := ""
+	if specBytes, err := json.Marshal(spec); err == nil {
+		specJson = string(specBytes)
+	}
+
 	resp, err := c.client.Spawn(ctx, &pb.SpawnRequest{
 		Id:         id,
 		KernelPath: kernel,
@@ -88,6 +94,7 @@ func (c *GrpcClient) Spawn(ctx context.Context, id string, spec *panespec.PaneSp
 		VcpuCount:  vcpu,
 		MemSizeMib: mem,
 		BootArgs:   bootArgs,
+		SpecJson:   specJson,
 	})
 	if err != nil {
 		return 0, 0, err
