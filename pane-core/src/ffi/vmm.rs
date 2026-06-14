@@ -1,5 +1,5 @@
+use crate::error::{check_ffi, Result};
 use std::ffi::CString;
-use crate::error::{Result, check_ffi};
 
 /// Opaque pointer corresponding to `pane_vm_t` in C.
 #[repr(C)]
@@ -102,16 +102,8 @@ extern "C" {
     fn pane_vm_get_vm_fd(vm: *const pane_vm) -> libc::c_int;
     fn pane_vm_init_irqchip(vm: *mut pane_vm) -> libc::c_int;
     fn pane_vm_vcpu_create(vm: *mut pane_vm, vcpu_id: u32) -> libc::c_int;
-    fn pane_vm_vcpu_set_regs(
-        vm: *mut pane_vm,
-        vcpu_id: u32,
-        regs: *const kvm_regs,
-    ) -> libc::c_int;
-    fn pane_vm_vcpu_get_regs(
-        vm: *const pane_vm,
-        vcpu_id: u32,
-        regs: *mut kvm_regs,
-    ) -> libc::c_int;
+    fn pane_vm_vcpu_set_regs(vm: *mut pane_vm, vcpu_id: u32, regs: *const kvm_regs) -> libc::c_int;
+    fn pane_vm_vcpu_get_regs(vm: *const pane_vm, vcpu_id: u32, regs: *mut kvm_regs) -> libc::c_int;
     fn pane_vm_vcpu_set_sregs(
         vm: *mut pane_vm,
         vcpu_id: u32,
@@ -300,13 +292,18 @@ impl SafeVm {
     }
 
     /// Sets up a virtio-mmio block device back-ended by the specified file.
-    pub fn setup_virtio_blk(&self, base_addr: u64, size: u64, irq: i32, disk_path: &str) -> Result<()> {
+    pub fn setup_virtio_blk(
+        &self,
+        base_addr: u64,
+        size: u64,
+        irq: i32,
+        disk_path: &str,
+    ) -> Result<()> {
         let c_path = CString::new(disk_path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         // SAFETY: The raw pointer is valid and c_path is a null-terminated C string.
-        let ret = unsafe {
-            pane_vm_setup_virtio_blk(self.raw, base_addr, size, irq, c_path.as_ptr())
-        };
+        let ret =
+            unsafe { pane_vm_setup_virtio_blk(self.raw, base_addr, size, irq, c_path.as_ptr()) };
         check_ffi(ret, "Set up Virtio-MMIO block device")?;
         Ok(())
     }
@@ -332,9 +329,7 @@ impl SafeVm {
         let c_qmp = CString::new(qmp_socket_path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         // SAFETY: The raw pointer is valid, and C strings are null-terminated.
-        let ret = unsafe {
-            pane_vm_setup_qemu_mode(self.raw, c_img.as_ptr(), c_qmp.as_ptr())
-        };
+        let ret = unsafe { pane_vm_setup_qemu_mode(self.raw, c_img.as_ptr(), c_qmp.as_ptr()) };
         check_ffi(ret, "Set up QEMU mode")?;
         Ok(())
     }
@@ -360,11 +355,7 @@ impl SafeVm {
         let mut buf = vec![0u8; 256];
         // SAFETY: The raw pointer is valid, and buffer pointer is valid for buffer length.
         let ret = unsafe {
-            pane_vm_qemu_query_status(
-                self.raw,
-                buf.as_mut_ptr() as *mut libc::c_char,
-                buf.len(),
-            )
+            pane_vm_qemu_query_status(self.raw, buf.as_mut_ptr() as *mut libc::c_char, buf.len())
         };
         check_ffi(ret, "Query QEMU status")?;
         // SAFETY: buf is populated and null-terminated by the native function on success.

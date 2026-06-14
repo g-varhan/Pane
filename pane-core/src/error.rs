@@ -18,10 +18,7 @@ pub enum PaneError {
     Spawn(String),
 
     #[error("Firecracker API returned error status {status}: {body}")]
-    Api {
-        status: String,
-        body: String,
-    },
+    Api { status: String, body: String },
 
     #[error("Timeout waiting for {0}")]
     Timeout(String),

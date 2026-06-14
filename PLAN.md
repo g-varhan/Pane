@@ -31,10 +31,10 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [x] VM state machine: `Spawning → Running → Frozen → Dead`
 - [x] Invalid transitions are compile-time errors via typestate pattern
 
-## Phase 8: pane-core - exec via vsock
-- [ ] `exec` via vsock implementation
-- [ ] Stream stdout/stderr as async chunks
-- [ ] Benchmark: round-trip < 10ms on loopback
+## Phase 8: pane-core - exec via vsock ✓
+- [x] `exec` via vsock implementation
+- [x] Stream stdout/stderr as async chunks
+- [x] Benchmark: round-trip < 10ms on loopback
 
 ## Phase 9: pane-core - Snapshot + Fork
 - [ ] Snapshot + fork implementation
@@ -59,5 +59,5 @@ Based on the build order specified in CLAUDE.md, we will implement Pane in the f
 - [ ] `pane run`, `pane exec`, `pane snapshot`, `pane fork`, `pane destroy` commands
 - [ ] Every command has `--json` flag
 
-## Current Focus: Phase 8
+## Current Focus: Phase 9
 

@@ -1,3 +1,3 @@
 pub mod vmm;
 
-pub use vmm::{SafeVm, pane_backend_t};
+pub use vmm::{pane_backend_t, SafeVm};

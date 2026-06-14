@@ -1,8 +1,8 @@
+use crate::error::{PaneError, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
-use serde::{Serialize, Deserialize};
-use crate::error::{PaneError, Result};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MachineConfig {
@@ -27,6 +27,13 @@ pub struct Drive {
     pub path_on_host: String,
     pub is_root_device: bool,
     pub is_read_only: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct VsockConfig {
+    pub vsock_id: String,
+    pub guest_cid: u32,
+    pub uds_path: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -91,7 +98,9 @@ impl FirecrackerVm {
     /// Spawns the firecracker process and waits for the Unix socket to be ready.
     pub async fn spawn(&mut self) -> Result<()> {
         if self.child.is_some() {
-            return Err(PaneError::Spawn("Firecracker VM already spawned".to_string()));
+            return Err(PaneError::Spawn(
+                "Firecracker VM already spawned".to_string(),
+            ));
         }
 
         // Ensure stale socket files are cleaned up
@@ -148,9 +157,17 @@ impl FirecrackerVm {
     }
 
     /// Sends a lightweight HTTP request over the Unix socket.
-    async fn send_request(&self, method: &str, path: &str, body: Option<&str>) -> Result<(String, String)> {
+    async fn send_request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> Result<(String, String)> {
         let mut stream = UnixStream::connect(&self.socket_path).await.map_err(|e| {
-            PaneError::Socket(format!("Failed to connect to socket {:?}: {}", self.socket_path, e))
+            PaneError::Socket(format!(
+                "Failed to connect to socket {:?}: {}",
+                self.socket_path, e
+            ))
         })?;
 
         let mut req = format!(
@@ -207,14 +224,16 @@ impl FirecrackerVm {
     /// Configures the VM CPU and memory.
     pub async fn configure_machine(&self, config: &MachineConfig) -> Result<()> {
         let body = serde_json::to_string(config)?;
-        self.send_request("PUT", "/machine-config", Some(&body)).await?;
+        self.send_request("PUT", "/machine-config", Some(&body))
+            .await?;
         Ok(())
     }
 
     /// Configures the kernel boot source.
     pub async fn configure_boot_source(&self, boot: &BootSource) -> Result<()> {
         let body = serde_json::to_string(boot)?;
-        self.send_request("PUT", "/boot-source", Some(&body)).await?;
+        self.send_request("PUT", "/boot-source", Some(&body))
+            .await?;
         Ok(())
     }
 
@@ -223,6 +242,13 @@ impl FirecrackerVm {
         let body = serde_json::to_string(drive)?;
         let path = format!("/drives/{}", drive.drive_id);
         self.send_request("PUT", &path, Some(&body)).await?;
+        Ok(())
+    }
+
+    /// Configures the vsock device.
+    pub async fn configure_vsock(&self, config: &VsockConfig) -> Result<()> {
+        let body = serde_json::to_string(config)?;
+        self.send_request("PUT", "/vsock", Some(&body)).await?;
         Ok(())
     }
 
@@ -262,7 +288,9 @@ impl FirecrackerVm {
             snapshot_type: "Full".to_string(),
         };
         let body = serde_json::to_string(&payload)?;
-        let res = self.send_request("PUT", "/snapshot/create", Some(&body)).await;
+        let res = self
+            .send_request("PUT", "/snapshot/create", Some(&body))
+            .await;
         // Always attempt to resume even if snapshot creation fails
         let _ = self.resume().await;
         res?;
@@ -277,7 +305,8 @@ impl FirecrackerVm {
             resume_vm: Some(true),
         };
         let body = serde_json::to_string(&payload)?;
-        self.send_request("PUT", "/snapshot/load", Some(&body)).await?;
+        self.send_request("PUT", "/snapshot/load", Some(&body))
+            .await?;
         Ok(())
     }
 

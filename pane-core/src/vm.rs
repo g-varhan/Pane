@@ -1,7 +1,7 @@
-use std::marker::PhantomData;
+use crate::backends::FirecrackerVm;
 use crate::error::Result;
 use crate::ffi::SafeVm;
-use crate::backends::FirecrackerVm;
+use std::marker::PhantomData;
 
 /// Opaque marker trait representing a valid state for a Virtual Machine.
 pub trait VmState: private::Sealed {}
@@ -68,7 +68,6 @@ pub enum VmBackend {
     Firecracker(Box<FirecrackerVm>),
 }
 
-
 /// Represents a Virtual Machine managed via the typestate pattern.
 ///
 /// # Example
@@ -84,6 +83,7 @@ pub enum VmBackend {
 pub struct Vm<State: VmState> {
     id: String,
     backend: VmBackend,
+    vsock_cid: u32,
     _state: PhantomData<State>,
 }
 
@@ -98,6 +98,18 @@ impl<State: VmState> Vm<State> {
     /// ```
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    /// Returns the vsock Context Identifier (CID) for this VM.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use pane_core::vm::Vm;
+    /// let vm = Vm::new_firecracker("vm-123");
+    /// assert_eq!(vm.vsock_cid(), 3);
+    /// ```
+    pub fn vsock_cid(&self) -> u32 {
+        self.vsock_cid
     }
 
     /// Returns a reference to the underlying VM backend.
@@ -124,6 +136,18 @@ impl<State: VmState> Vm<State> {
         }
         Ok(())
     }
+
+    /// Resolves the vsock UDS socket path for this VM.
+    pub fn get_vsock_socket_path(&self) -> std::path::PathBuf {
+        let run_pane = std::path::Path::new("/run/pane");
+        if run_pane.exists() || std::fs::create_dir_all(run_pane).is_ok() {
+            run_pane.join(format!("fc-vsock-{}.sock", self.id))
+        } else {
+            let tmp_pane = std::path::Path::new("/tmp/pane");
+            let _ = std::fs::create_dir_all(tmp_pane);
+            tmp_pane.join(format!("fc-vsock-{}.sock", self.id))
+        }
+    }
 }
 
 impl Vm<Spawning> {
@@ -138,10 +162,10 @@ impl Vm<Spawning> {
         Self {
             id: id.to_string(),
             backend: VmBackend::Firecracker(Box::new(FirecrackerVm::new(id))),
+            vsock_cid: 3, // Default CID
             _state: PhantomData,
         }
     }
-
 
     /// Creates a new Native KVM/QEMU-backed VM in the Spawning state.
     ///
@@ -159,6 +183,7 @@ impl Vm<Spawning> {
         Self {
             id: id.to_string(),
             backend: VmBackend::Native(safe_vm),
+            vsock_cid: 3, // Default CID
             _state: PhantomData,
         }
     }
@@ -202,6 +227,34 @@ impl Vm<Spawning> {
             VmBackend::Firecracker(fc) => fc.configure_machine(config).await,
             VmBackend::Native(_) => Ok(()),
         }
+    }
+
+    /// Configures the vsock device for the VM.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use pane_core::vm::Vm;
+    /// let mut vm = Vm::new_firecracker("fc-vm");
+    /// vm.spawn().await.unwrap();
+    /// vm.configure_vsock(4).await.unwrap();
+    /// # });
+    /// ```
+    pub async fn configure_vsock(&mut self, guest_cid: u32) -> Result<()> {
+        self.vsock_cid = guest_cid;
+        match &self.backend {
+            VmBackend::Firecracker(fc) => {
+                let uds_path = self.get_vsock_socket_path();
+                let config = crate::backends::VsockConfig {
+                    vsock_id: "vsock0".to_string(),
+                    guest_cid,
+                    uds_path: uds_path.to_string_lossy().into_owned(),
+                };
+                fc.configure_vsock(&config).await?;
+            }
+            VmBackend::Native(_) => {}
+        }
+        Ok(())
     }
 
     /// Configures the kernel boot source details.
@@ -288,6 +341,7 @@ impl Vm<Spawning> {
         Ok(Vm {
             id: self.id,
             backend: self.backend,
+            vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
     }
@@ -307,6 +361,7 @@ impl Vm<Spawning> {
         Ok(Vm {
             id: self.id,
             backend: self.backend,
+            vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
     }
@@ -336,6 +391,7 @@ impl Vm<Running> {
         Ok(Vm {
             id: self.id,
             backend: self.backend,
+            vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
     }
@@ -356,8 +412,38 @@ impl Vm<Running> {
         Ok(Vm {
             id: self.id,
             backend: self.backend,
+            vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
+    }
+
+    /// Executes a command inside the running VM via vsock.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use pane_core::vm::Vm;
+    /// use pane_core::exec::ExecRequest;
+    /// # let mut vm = Vm::new_firecracker("fc-vm");
+    /// # let running_vm = vm.start().await.unwrap();
+    /// let req = ExecRequest {
+    ///     command: "/bin/ls".to_string(),
+    ///     args: vec!["-l".to_string()],
+    /// };
+    /// let mut stream = running_vm.exec(&req).await.unwrap();
+    /// # });
+    /// ```
+    pub async fn exec(
+        &self,
+        req: &crate::exec::ExecRequest,
+    ) -> Result<crate::exec::ExecStream<tokio::net::UnixStream>> {
+        let vsock_uds_path = self.get_vsock_socket_path();
+        match &self.backend {
+            VmBackend::Firecracker(_) => {
+                crate::exec::exec_in_guest(&vsock_uds_path, req, true).await
+            }
+            VmBackend::Native(_) => crate::exec::exec_in_guest(&vsock_uds_path, req, false).await,
+        }
     }
 }
 
@@ -386,6 +472,7 @@ impl Vm<Frozen> {
         Ok(Vm {
             id: self.id,
             backend: self.backend,
+            vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
     }
@@ -429,6 +516,7 @@ impl Vm<Frozen> {
         Ok(Vm {
             id: self.id,
             backend: self.backend,
+            vsock_cid: self.vsock_cid,
             _state: PhantomData,
         })
     }

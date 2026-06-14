@@ -7,10 +7,13 @@ fn test_vmm_lifecycle() {
             println!("VMM created successfully!");
             assert!(vm.get_kvm_fd() >= 0);
             assert!(vm.get_vm_fd() >= 0);
-            
+
             // Try initializing irqchip
             if let Err(e) = vm.init_irqchip() {
-                println!("Warning: failed to init irqchip (may not be supported on this host/VM): {:?}", e);
+                println!(
+                    "Warning: failed to init irqchip (may not be supported on this host/VM): {:?}",
+                    e
+                );
             }
 
             // Create vCPU 0

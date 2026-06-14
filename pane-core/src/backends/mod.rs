@@ -1,3 +1,3 @@
 pub mod firecracker;
 
-pub use firecracker::{FirecrackerVm, MachineConfig, BootSource, Drive};
+pub use firecracker::{BootSource, Drive, FirecrackerVm, MachineConfig, VsockConfig};

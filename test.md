@@ -307,7 +307,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 **Test:** All public API doc-examples in `src/vm.rs` compile and run via `cargo test --doc`.
 
 ```
-   Doc-tests pane_core
+    Doc-tests pane_core
 running 22 tests
 test src/vm.rs - vm::Spawning (line 16)                           - compile ... ok
 test src/vm.rs - vm::Running (line 27)                            - compile ... ok
@@ -339,6 +339,33 @@ test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 ---
 
+### Phase 8 — exec via vsock
+
+**Test:** Execute guest commands, capturing stdout/stderr streams and process exit status. Verify loopback round-trip benchmark is under 10ms.
+
+**Command:** `cargo test --test test_vsock_exec`
+
+```
+     Running tests/test_vsock_exec.rs (target/debug/deps/test_vsock_exec-c880ce3bb1405c52)
+running 3 tests
+test test_agent_exec_stderr_and_failure ... ok
+Vsock exec round-trip took: 8.607374ms
+test test_agent_roundtrip_benchmark ... ok
+test test_agent_exec_success ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+```
+
+| Metric                         | Result         | Target     | Status |
+|--------------------------------|----------------|------------|--------|
+| `test_agent_exec_success`      | stdout match   | match      | ✅ PASS |
+| `test_agent_exec_stderr_err`   | stderr, status | code 42    | ✅ PASS |
+| Round-trip execution latency   | 8.6 ms         | < 10 ms    | ✅ PASS |
+
+**Result: PASS** — Commands executed correctly with precise stdout/stderr capturing and < 10ms round-trip latency.
+
+---
+
 ## Complete Test Summary
 
 | Phase | Layer       | Test                                   | Result     |
@@ -353,10 +380,11 @@ test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 | 6     | pane-core   | Firecracker REST API client            | ✅ PASS    |
 | 7     | pane-core   | VM state machine native full lifecycle | ✅ PASS    |
 | 7     | pane-core   | VM state machine Firecracker teardown  | ✅ PASS    |
+| 8     | pane-core   | Vsock guest agent command execution    | ✅ PASS    |
 | 6–7   | pane-core   | Doc-tests (22 public API examples)     | ✅ PASS    |
-| 6–7   | pane-core   | `cargo clippy -- -D warnings`          | ✅ PASS    |
+| 6–8   | pane-core   | `cargo clippy -- -D warnings`          | ✅ PASS    |
 
-**Total: 12/12 test suites passing. Zero failures. Zero warnings.**
+**Total: 13/13 test suites passing. Zero failures. Zero warnings.**
 
 ---
 
@@ -369,6 +397,7 @@ test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 | Firecracker boot latency (p99)  | < 5 ms             | < 5 ms         | ✅ PASS |
 | `io_uring` throughput vs pread  | +227%              | > +15%         | ✅ PASS |
 | `io_uring` sequential read      | 2,970 MB/s         | –              | –       |
+| Vsock exec round-trip latency   | 8.6 ms             | < 10 ms        | ✅ PASS |
 | Rust clippy warnings            | 0                  | 0              | ✅ PASS |
 | Doc-test examples compiled      | 22/22              | all            | ✅ PASS |
-| Rust integration tests passing  | 4/4                | all            | ✅ PASS |
+| Rust integration tests passing  | 7/7                | all            | ✅ PASS |
