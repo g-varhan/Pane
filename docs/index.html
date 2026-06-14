@@ -749,6 +749,51 @@
         </div>
       </div>
     </section>
+
+    <!-- Pane v0.2 Features Section -->
+    <section id="v0.2-features" class="primitives-section" style="border-top: 1px solid var(--border-color); padding-top: 5rem; margin-top: 5rem;">
+      <div class="primitives-title">
+        <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-primary); margin-bottom: 0.5rem; display: block;">NEW IN V0.2</span>
+        <h2 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem;">Unified Control Plane & Container Compatibility</h2>
+        <p style="color: var(--text-subtle); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
+          Pane v0.2 introduces a unified CLI dispatcher, dynamic configuration, and OCI/Docker container compatibility.
+        </p>
+      </div>
+
+      <div class="primitives-grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
+        <!-- Unified CLI -->
+        <div class="primitive-card" style="padding: 2rem;">
+          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">Unified Cobra CLI Dispatcher</h3>
+          <p class="primitive-desc" style="margin-bottom: 0;">
+            Manage the lifecycle of the API daemon (<code>pane daemon start</code>) and direct VM operations (<code>pane run</code>, <code>pane exec</code>) through a single unified binary. Falls back automatically to direct FFI-embedded in-process execution when the daemon is offline.
+          </p>
+        </div>
+
+        <!-- Dynamic Config -->
+        <div class="primitive-card" style="padding: 2rem;">
+          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">Dynamic QEMU Config Builder</h3>
+          <p class="primitive-desc" style="margin-bottom: 0;">
+            No more hardcoded C arguments. Merges CLI flags, configuration YAML files, cached metadata, and default profiles dynamically. Supports raw argument passthrough (<code>-- &lt;args...&gt;</code>) and VNC/display settings via simple flags.
+          </p>
+        </div>
+
+        <!-- Scoped Pull -->
+        <div class="primitive-card" style="padding: 2rem;">
+          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">Cached Image Cache & Scoped Pull</h3>
+          <p class="primitive-desc" style="margin-bottom: 0;">
+            Fetch and manage virtual machines or container images from standard manifests, Docker Hub registries, HTTP URLs, or local filesystems. Emits clean <code>metadata.json</code> and default <code>panespec.json</code> configurations automatically.
+          </p>
+        </div>
+
+        <!-- Container Compatibility -->
+        <div class="primitive-card" style="padding: 2rem;">
+          <h3 style="font-size: 1.3rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 0.75rem;">OCI/Docker Container VM Compatibility</h3>
+          <p class="primitive-desc" style="margin-bottom: 0;">
+            Flatten Docker layers, inject a static C-based <code>init</code> binary (PID 1) and guest agent, format to raw ext4 disks via host <code>mke2fs</code>, and boot directly via Firecracker/QEMU kernel direct booting with full cgroups v2 boundaries.
+          </p>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- Core Tech Stack -->

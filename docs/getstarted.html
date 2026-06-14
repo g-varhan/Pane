@@ -438,6 +438,36 @@ func main() {
 
       <hr>
 
+      <h2>2.5 Running OCI/Docker Container Images inside MicroVMs</h2>
+
+      <p>For modern containerized workloads, Pane features <strong>Container Compatibility (pane-ctr)</strong>. It lets you run Docker/OCI container images inside highly secure KVM microVMs with sub-second boot times.</p>
+
+      <h3>How the Conversion Pipeline Works</h3>
+      <ol>
+        <li><strong>Layer Pulling</strong>: Pane uses <code>go-containerregistry</code> to fetch the OCI image manifest and layer tarballs from the registry (e.g. Docker Hub).</li>
+        <li><strong>Layer Flattening</strong>: The layers are sequentially extracted into a host temporary directory. Standard OCI whiteouts (<code>.wh.&lt;file&gt;</code>) and opaque markers are resolved to correctly handle deleted files and folders.</li>
+        <li><strong>Agent Injection</strong>: The static host <code>pane-agent</code> binary is injected into the rootfs as <code>/usr/sbin/pane-agent</code>.</li>
+        <li><strong>PID 1 Init Injection</strong>: A custom minimal, statically-linked C-based bootstrapper is compiled and injected as <code>/init</code>.</li>
+        <li><strong>ext4 Disk Formatting</strong>: The flattened rootfs directory is formatted into a raw ext4 filesystem disk image using host-side <code>mke2fs -d</code>.</li>
+        <li><strong>Kernel Provisioning</strong>: Pane automatically downloads and caches a precompiled guest Linux kernel (ELF uncompressed vmlinux) to boot the microVM.</li>
+      </ol>
+
+      <h3>Step 1: Pull and Convert a Container</h3>
+      <p>Simply use the <code>docker://</code> scheme prefix to pull any container image:</p>
+      <pre><code># Pull and automatically convert nginx to a Pane bootable VM image
+pane pull docker://nginx:latest
+</code></pre>
+      <p>This outputs a bootable virtual disk containing the flattened rootfs, static init, and cached Firecracker kernel defaults inside <code>/var/lib/pane/images/nginx-latest/</code>.</p>
+
+      <h3>Step 2: Run the Converted Container</h3>
+      <p>To run the container, use the image name directly. You can override memory, CPUs, or add raw QEMU passthrough args:</p>
+      <pre><code># Spawn the container-derived microVM
+pane run --name nginx-container alpine-latest
+</code></pre>
+      <p>At boot, the statically linked guest <code>/init</code> mounts API filesystems, spawns the vsock agent loop, reads <code>/oci-config.json</code>, sets up environment variables, changes directory, and execs the container's OCI entrypoint as PID 1.</p>
+
+      <hr>
+
       <h2>3. Running Custom ISOs & Windows on Pane</h2>
 
       <p>Pane's default <code>Spawning</code> state leverages Firecracker for speed, but the C-layer hypervisor <code>pane-vmm</code> contains a fully functional <strong>QEMU Backend</strong> designed to run custom ISOs, full operating systems (like Ubuntu Server), or Windows.</p>
