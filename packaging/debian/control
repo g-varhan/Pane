@@ -1,0 +1,14 @@
+Source: pane
+Section: utils
+Priority: optional
+Maintainer: Pane Developers <info@pane.dev>
+Build-Depends: debhelper-compat (= 13), golang-go, cargo, rustc, clang, make, liburing-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/g-varhan/Pane
+
+Package: pane
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, liburing2
+Description: A modular, high-performance hypervisor orchestration engine
+ Pane is a low-latency, modular hypervisor orchestration engine using KVM,
+ io_uring, and eBPF.

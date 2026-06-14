@@ -1,0 +1,32 @@
+#!/usr/bin/make -f
+# See debhelper(7)
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# 1. Build C VMM static library
+	make -C pane-vmm clean
+	make -C pane-vmm CFLAGS="-Wall -Wextra -Werror -O2"
+
+	# 2. Build Rust core orchestration library
+	cd pane-core && cargo build --release
+
+	# 3. Build Go gRPC Server
+	cd pane-api && CGO_ENABLED=1 go build -ldflags="-s -w" -o pane-api main.go
+
+override_dh_auto_install:
+	# Install binary
+	mkdir -p debian/pane/usr/bin
+	install -m 755 pane-api/pane-api debian/pane/usr/bin/pane-api
+
+	# Install headers and libs for dev use
+	mkdir -p debian/pane/usr/include
+	install -m 644 pane-vmm/include/pane_vmm.h debian/pane/usr/include/pane_vmm.h
+	mkdir -p debian/pane/usr/lib
+	install -m 644 pane-vmm/libpane_vmm.a debian/pane/usr/lib/libpane_vmm.a
+
+override_dh_auto_clean:
+	make -C pane-vmm clean
+	cd pane-core && cargo clean || true
+	rm -f pane-api/pane-api || true

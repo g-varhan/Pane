@@ -1,0 +1,39 @@
+# Maintainer: Pane Developers <info@pane.dev>
+pkgname=pane
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A modular, high-performance hypervisor orchestration engine using KVM, io_uring, and eBPF"
+arch=('x86_64')
+url="https://github.com/g-varhan/Pane"
+license=('Apache-2.0')
+depends=('liburing' 'glibc')
+makedepends=('rust' 'go' 'clang' 'make')
+source=("git+https://github.com/g-varhan/Pane.git")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/Pane"
+  
+  # 1. Build C VMM static library
+  make -C pane-vmm clean
+  make -C pane-vmm CFLAGS="-Wall -Wextra -Werror -O2"
+  
+  # 2. Build Rust core orchestration library
+  cd pane-core
+  cargo build --release
+  
+  # 3. Build Go gRPC Server
+  cd ../pane-api
+  CGO_ENABLED=1 go build -ldflags="-s -w" -o pane-api main.go
+}
+
+package() {
+  cd "$srcdir/Pane"
+  
+  # Install binaries
+  install -Dm755 pane-api/pane-api "$pkgdir/usr/bin/pane-api"
+  
+  # Install headers and libraries for developer use
+  install -Dm644 pane-vmm/include/pane_vmm.h "$pkgdir/usr/include/pane_vmm.h"
+  install -Dm644 pane-vmm/libpane_vmm.a "$pkgdir/usr/lib/libpane_vmm.a"
+}
