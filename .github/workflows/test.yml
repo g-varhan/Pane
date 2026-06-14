@@ -1,0 +1,35 @@
+name: Benchmark and Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential liburing-dev qemu-system-x86 cpu-checker
+
+    - name: Check KVM Support
+      run: |
+        kvm-ok || true
+        ls -l /dev/kvm || true
+
+    - name: Add user to KVM group
+      run: |
+        sudo usermod -aG kvm $USER
+        # We might need to run tests with sudo if group change doesn't apply in the same session,
+        # but in GitHub actions, runner user is in sudoers without password.
+
+    - name: Run Tests and Benchmarks
+      run: |
+        # Run tests (sudo ensures /dev/kvm permissions if group change isn't picked up)
+        sudo make test
