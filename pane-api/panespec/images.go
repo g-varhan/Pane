@@ -72,8 +72,8 @@ var knownDistros = map[string]distroEntry{
 		memory:  "2GiB",
 	},
 	"ubuntu-desktop": {
-		version: "v24.04",
-		url:     "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-desktop-amd64.iso",
+		version: "v26.04",
+		url:     "https://releases.ubuntu.com/26.04/ubuntu-26.04-desktop-amd64.iso",
 		cpus:    2,
 		memory:  "4GiB",
 	},
