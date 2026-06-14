@@ -40,7 +40,7 @@ if [ -f /etc/arch-release ]; then
 elif [ -f /etc/debian_version ]; then
     echo "${BLUE}Detected Debian/Ubuntu. Installing dependencies via apt...${NC}"
     $SUDO apt-get update
-    $SUDO apt-get install -y liburing-dev clang rustc cargo golang-go make git
+    $SUDO apt-get install -y liburing-dev clang rustc cargo golang-go make git libbpf-dev gcc-multilib
 elif [ -f /etc/fedora-release ] || [ -f /etc/redhat-release ]; then
     echo "${BLUE}Detected Fedora/RHEL. Installing dependencies via dnf...${NC}"
     $SUDO dnf install -y liburing-devel clang rust cargo golang make git
@@ -69,6 +69,7 @@ cd ..
 # 4. Build Go gRPC Server Daemon
 echo "${BLUE}Building pane-api daemon...${NC}"
 cd pane-api
+sed -i 's/target\/debug/target\/release/g' ffi/core.go
 CGO_ENABLED=1 go build -ldflags="-s -w" -o pane-api main.go
 cd ..
 
