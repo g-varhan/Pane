@@ -16,9 +16,9 @@ import (
 // ────────────────────────────────────────────────────────────────────────────
 
 const (
-	// tiny10 – minimal Windows 11 23H2 image hosted on the Internet Archive.
+	// windows – tiny10 (minimal Windows 11 23H2) image hosted on the Internet Archive.
 	// Direct link; archive.org redirects to a CDN node (302 → HTTPS).
-	defaultTiny10URL = "https://archive.org/download/tiny-10-23-h2/tiny10%20x64%2023h2.iso"
+	defaultWindowsURL = "https://archive.org/download/tiny-10-23-h2/tiny10%20x64%2023h2.iso"
 
 	// VirtIO-Win – Fedora-hosted driver ISO for Windows guests.
 	// Corrected filename (the .iso symlink redirects to the versioned file).
@@ -179,9 +179,9 @@ func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 	}
 	diskPath := filepath.Join(targetDir, "disk.iso")
 
-	// ── 1. tiny10 (Windows) ─────────────────────────────────────────────────
-	if name == "tiny10" {
-		return pullTiny10(diskPath, targetDir)
+	// ── 1. Windows (tiny10 – testing only) ──────────────────────────────────
+	if name == "windows" {
+		return pullWindows(diskPath, targetDir)
 	}
 
 	// ── 2. Known Linux distros ──────────────────────────────────────────────
@@ -212,42 +212,42 @@ func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// tiny10 pull logic
+// windows pull logic
 // ────────────────────────────────────────────────────────────────────────────
 
-func pullTiny10(diskPath, targetDir string) error {
-	// ── Resolve tiny10 ISO source (priority: env override > web) ────────────
-	tiny10URL := os.Getenv("GITHUB_TINY10_URL")
-	if tiny10URL == "" {
-		tiny10URL = os.Getenv("TINY10_URL")
+func pullWindows(diskPath, targetDir string) error {
+	// ── Resolve Windows ISO source (priority: env override > web) ───────────
+	windowsURL := os.Getenv("GITHUB_WINDOWS_URL")
+	if windowsURL == "" {
+		windowsURL = os.Getenv("WINDOWS_URL")
 	}
 
-	if tiny10URL != "" || true {
+	if windowsURL != "" || true {
 		// Check local path first so we never re-download unnecessarily.
-		srcIso := os.Getenv("TINY10_ISO_PATH")
+		srcIso := os.Getenv("WINDOWS_ISO_PATH")
 		if srcIso == "" {
 			srcIso = "/home/varhan/Documents/disk/tiny10 x64 23h2.iso"
 		}
 
 		if _, err := os.Stat(srcIso); err == nil {
 			// Local ISO exists — register via symlink.
-			fmt.Printf("  Found local tiny10 ISO: %s\n", srcIso)
+			fmt.Printf("  Found local Windows ISO (tiny10): %s\n", srcIso)
 			_ = os.Remove(diskPath)
 			if err := os.Symlink(srcIso, diskPath); err != nil {
 				if err := copyFile(srcIso, diskPath); err != nil {
-					return fmt.Errorf("failed to link/copy tiny10 ISO: %w", err)
+					return fmt.Errorf("failed to link/copy Windows ISO: %w", err)
 				}
 			}
 		} else {
 			// Download from web.
-			url := tiny10URL
+			url := windowsURL
 			if url == "" {
-				url = defaultTiny10URL
+				url = defaultWindowsURL
 			}
-			fmt.Printf("\n  Pulling tiny10 (Windows 11 23H2 minimal)\n")
+			fmt.Printf("\n  Pulling Windows (tiny10 – testing purposes only)\n")
 			fmt.Printf("  Source : %s\n\n", url)
 			if err := downloadWithProgress(url, diskPath); err != nil {
-				return fmt.Errorf("failed to download tiny10: %w", err)
+				return fmt.Errorf("failed to download Windows ISO: %w", err)
 			}
 		}
 	}
@@ -255,8 +255,8 @@ func pullTiny10(diskPath, targetDir string) error {
 	// ── Resolve VirtIO-Win driver ISO ────────────────────────────────────────
 	virtioPath := resolveVirtioWin(targetDir)
 
-	writeTiny10Meta(diskPath, virtioPath, targetDir)
-	fmt.Println("\n✓  tiny10 registered successfully!")
+	writeWindowsMeta(diskPath, virtioPath, targetDir)
+	fmt.Println("\n✓  Windows (tiny10) registered successfully!")
 	return nil
 }
 
@@ -297,17 +297,17 @@ func resolveVirtioWin(targetDir string) string {
 	return cached
 }
 
-// writeTiny10Meta writes metadata.json and panespec.json for a tiny10 image.
+// writeWindowsMeta writes metadata.json and panespec.json for a Windows (tiny10) image.
 // virtioPath may be empty if the driver ISO is unavailable.
-func writeTiny10Meta(diskPath, virtioPath, targetDir string) {
-	source := defaultTiny10URL
-	if p := os.Getenv("TINY10_ISO_PATH"); p != "" {
+func writeWindowsMeta(diskPath, virtioPath, targetDir string) {
+	source := defaultWindowsURL
+	if p := os.Getenv("WINDOWS_ISO_PATH"); p != "" {
 		source = "local://" + p
 	}
-	if u := os.Getenv("GITHUB_TINY10_URL"); u != "" {
+	if u := os.Getenv("GITHUB_WINDOWS_URL"); u != "" {
 		source = u
 	}
-	meta := ImageMetadata{Name: "tiny10", Version: "23H2", VMM: "qemu", Source: source}
+	meta := ImageMetadata{Name: "windows", Version: "23H2", VMM: "qemu", Source: source}
 	writeMetaJSON(targetDir, meta)
 
 	spec := DefaultProfile()

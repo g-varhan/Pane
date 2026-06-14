@@ -47,8 +47,28 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 		}
 	}
 
+	if spec.Env != nil {
+		for k, v := range spec.Env {
+			os.Setenv(k, v)
+		}
+		defer func() {
+			for k := range spec.Env {
+				os.Unsetenv(k)
+			}
+		}()
+	}
+
 	cid, pid, err := ffi.Spawn(req.Id, spec)
 	if err != nil {
+		// Attempt to read QEMU logs to give a more informative error message
+		logPath := fmt.Sprintf("/run/pane/qemu-%s.log", req.Id)
+		if _, errStat := os.Stat(logPath); os.IsNotExist(errStat) {
+			logPath = fmt.Sprintf("/tmp/pane/qemu-%s.log", req.Id)
+		}
+		if logBytes, errRead := os.ReadFile(logPath); errRead == nil && len(logBytes) > 0 {
+			_ = os.Remove(logPath)
+			return nil, status.Errorf(codes.Internal, "failed to spawn VM: %v\nQEMU log:\n%s", err, string(logBytes))
+		}
 		return nil, status.Errorf(codes.Internal, "failed to spawn VM: %v", err)
 	}
 

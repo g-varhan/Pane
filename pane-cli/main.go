@@ -458,6 +458,19 @@ func PaneSpecToPaneSpec(
 			mode = display
 		}
 		spec.ExtraArgs = append(spec.ExtraArgs, "-display", mode)
+
+		// Capture DISPLAY and XAUTHORITY env vars
+		spec.Env = make(map[string]string)
+		if disp := os.Getenv("DISPLAY"); disp != "" {
+			spec.Env["DISPLAY"] = disp
+		}
+		if xauth := os.Getenv("XAUTHORITY"); xauth != "" {
+			spec.Env["XAUTHORITY"] = xauth
+		} else {
+			if home := os.Getenv("HOME"); home != "" {
+				spec.Env["XAUTHORITY"] = filepath.Join(home, ".Xauthority")
+			}
+		}
 	}
 
 	if len(extraArgs) > 0 {

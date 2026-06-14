@@ -62,6 +62,7 @@ type PaneSpec struct {
 	Kernel    *string        `json:"kernel,omitempty" yaml:"kernel,omitempty"`
 	Cmdline   *string        `json:"cmdline,omitempty" yaml:"cmdline,omitempty"`
 	ExtraArgs []string      `json:"extra_args,omitempty" yaml:"extra_args,omitempty"`
+	Env       map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 }
 
 var sizeRegex = regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$`)
@@ -295,14 +296,63 @@ func Merge(base, override *PaneSpec) *PaneSpec {
 	}
 
 	// ExtraArgs
-	if len(override.ExtraArgs) > 0 {
-		result.ExtraArgs = make([]string, len(override.ExtraArgs))
-		copy(result.ExtraArgs, override.ExtraArgs)
-	} else {
-		result.ExtraArgs = make([]string, len(base.ExtraArgs))
-		copy(result.ExtraArgs, base.ExtraArgs)
+	result.ExtraArgs = MergeExtraArgs(base.ExtraArgs, override.ExtraArgs)
+
+	// Env
+	if base.Env == nil && override.Env != nil {
+		result.Env = override.Env
+	} else if base.Env != nil && override.Env == nil {
+		result.Env = base.Env
+	} else if base.Env != nil && override.Env != nil {
+		result.Env = make(map[string]string)
+		for k, v := range base.Env {
+			result.Env[k] = v
+		}
+		for k, v := range override.Env {
+			result.Env[k] = v
+		}
 	}
 
+	return result
+}
+
+func MergeExtraArgs(base, override []string) []string {
+	if len(override) == 0 {
+		res := make([]string, len(base))
+		copy(res, base)
+		return res
+	}
+	if len(base) == 0 {
+		res := make([]string, len(override))
+		copy(res, override)
+		return res
+	}
+
+	overrideFlags := make(map[string]bool)
+	for i := 0; i < len(override); i++ {
+		if strings.HasPrefix(override[i], "-") {
+			overrideFlags[override[i]] = true
+		}
+	}
+
+	result := []string{}
+	// Add base args, skipping any flag that is overridden
+	for i := 0; i < len(base); {
+		arg := base[i]
+		if strings.HasPrefix(arg, "-") && overrideFlags[arg] {
+			// Skip this flag and its value if it has one and the next token is not a flag
+			i++
+			if i < len(base) && !strings.HasPrefix(base[i], "-") {
+				i++
+			}
+		} else {
+			result = append(result, arg)
+			i++
+		}
+	}
+
+	// Append all override args
+	result = append(result, override...)
 	return result
 }
 

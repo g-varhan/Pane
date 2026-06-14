@@ -33,14 +33,17 @@ echo -e "${NC}"
 # ── CLI flags ────────────────────────────────────────────────────────────────
 PREFIX="/usr/local"
 PURGE=false
+YES=false
 
 for arg in "$@"; do
   case "$arg" in
     --purge)      PURGE=true ;;
+    -y|--yes)     YES=true ;;
     --prefix=*)   PREFIX="${arg#*=}" ;;
     -h|--help)
-      echo "Usage: uninstall.sh [--purge] [--prefix=PATH]"
+      echo "Usage: uninstall.sh [--purge] [-y|--yes] [--prefix=PATH]"
       echo "  --purge        Also remove /var/lib/pane (images, snapshots)"
+      echo "  -y, --yes      Bypass the confirmation prompt"
       echo "  --prefix=PATH  Install prefix used at install time (default: /usr/local)"
       exit 0 ;;
   esac
@@ -54,16 +57,19 @@ INCDIR="$PREFIX/include"
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 # ── Confirmation ──────────────────────────────────────────────────────────────
-echo -e "${YELLOW}${BOLD}This will remove Pane from your system.${NC}"
-if [ "$PURGE" = true ]; then
-  echo -e "${RED}${BOLD}--purge is set: ALL images and snapshots in /var/lib/pane will be deleted!${NC}"
+if [ "$YES" = false ]; then
+  echo -e "${YELLOW}${BOLD}This will remove Pane from your system.${NC}"
+  if [ "$PURGE" = true ]; then
+    echo -e "${RED}${BOLD}--purge is set: ALL images and snapshots in /var/lib/pane will be deleted!${NC}"
+  fi
+  echo ""
+  CONFIRM=""
+  read -rp "  Continue? [y/N] " CONFIRM || true
+  case "$CONFIRM" in
+    [yY]|[yY][eE][sS]) : ;;
+    *) echo "Aborted."; exit 0 ;;
+  esac
 fi
-echo ""
-read -rp "  Continue? [y/N] " CONFIRM
-case "$CONFIRM" in
-  [yY]|[yY][eE][sS]) : ;;
-  *) echo "Aborted."; exit 0 ;;
-esac
 
 # ── 1. Stop and disable systemd service ──────────────────────────────────────
 section "Stopping Pane Daemon"

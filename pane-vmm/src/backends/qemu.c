@@ -208,6 +208,17 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, cons
 
     qemu_args_add_extra(qa, config);
 
+    // Build the QEMU log file path from qmp_socket_path
+    char log_path[1024];
+    strncpy(log_path, qmp_socket_path, sizeof(log_path) - 1);
+    char *last_slash = strrchr(log_path, '/');
+    if (last_slash) {
+        int dir_len = last_slash - log_path;
+        snprintf(log_path, sizeof(log_path), "%.*s/qemu-%s.log", dir_len, qmp_socket_path, config->vm_id);
+    } else {
+        snprintf(log_path, sizeof(log_path), "qemu-%s.log", config->vm_id);
+    }
+
     // Fork and execute qemu
     pid_t pid = fork();
     if (pid < 0) {
@@ -216,14 +227,26 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, cons
     }
 
     if (pid == 0) {
-        // Redirect stdin, stdout, stderr to /dev/null to prevent SIGPIPE when parent exits
-        int dev_null = open("/dev/null", O_RDWR);
-        if (dev_null >= 0) {
-            dup2(dev_null, 0);
-            dup2(dev_null, 1);
-            dup2(dev_null, 2);
-            close(dev_null);
+        // Redirect stdout and stderr to the log file
+        int log_fd = open(log_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (log_fd >= 0) {
+            dup2(log_fd, 1);
+            dup2(log_fd, 2);
+            close(log_fd);
+        } else {
+            int dev_null = open("/dev/null", O_RDWR);
+            if (dev_null >= 0) {
+                dup2(dev_null, 1);
+                dup2(dev_null, 2);
+                close(dev_null);
+            }
         }
+        int dev_null_in = open("/dev/null", O_RDONLY);
+        if (dev_null_in >= 0) {
+            dup2(dev_null_in, 0);
+            close(dev_null_in);
+        }
+
         // Child process: execute QEMU
         execvp("qemu-system-x86_64", qa->argv);
         perror("execvp qemu-system-x86_64");
@@ -260,6 +283,15 @@ int pane_vm_setup_qemu_mode(pane_vm_t *vm, const pane_vmm_config_t *config, cons
 
     if (client_fd < 0) {
         fprintf(stderr, "Failed to connect to QMP socket at %s\n", qmp_socket_path);
+        FILE *log_file = fopen(log_path, "r");
+        if (log_file) {
+            fprintf(stderr, "QEMU log output:\n");
+            char line[256];
+            while (fgets(line, sizeof(line), log_file)) {
+                fprintf(stderr, "  %s", line);
+            }
+            fclose(log_file);
+        }
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
         return -ECONNREFUSED;
