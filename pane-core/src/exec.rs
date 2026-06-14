@@ -7,7 +7,7 @@ use tokio::net::UnixStream;
 ///
 /// # Example
 /// ```
-/// use pane_core::backends::ExecRequest;
+/// use pane_core::ExecRequest;
 /// let req = ExecRequest {
 ///     command: "/bin/ls".to_string(),
 ///     args: vec!["-l".to_string()],
@@ -54,7 +54,7 @@ impl<R: AsyncRead + Unpin> ExecStream<R> {
     /// # Example
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// # use pane_core::backends::ExecStream;
+    /// # use pane_core::ExecStream;
     /// # let reader = tokio::io::empty();
     /// let mut stream = ExecStream::new(reader);
     /// while let Some(chunk) = stream.next().await.unwrap() {

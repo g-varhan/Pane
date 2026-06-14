@@ -110,4 +110,7 @@ int pane_vm_qemu_resume(pane_vm_t *vm);
 // Returns 0 on success, negative errno on failure.
 int pane_vm_qemu_query_status(pane_vm_t *vm, char *status_out, size_t max_len);
 
+// Get the PID associated with the VM (QEMU PID or host process PID for native).
+int pane_vm_get_pid(const pane_vm_t *vm);
+
 #endif // PANE_VMM_H

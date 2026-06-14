@@ -148,6 +148,7 @@ extern "C" {
         status_out: *mut libc::c_char,
         max_len: libc::size_t,
     ) -> libc::c_int;
+    fn pane_vm_get_pid(vm: *const pane_vm) -> libc::c_int;
 }
 
 /// A safe, typed Rust wrapper managing the raw `pane_vm_t` structure lifecycle.
@@ -361,6 +362,12 @@ impl SafeVm {
         // SAFETY: buf is populated and null-terminated by the native function on success.
         let c_str = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr() as *const libc::c_char) };
         Ok(c_str.to_string_lossy().into_owned())
+    }
+
+    /// Gets the PID associated with the VM.
+    pub fn get_pid(&self) -> i32 {
+        // SAFETY: The raw pointer is valid.
+        unsafe { pane_vm_get_pid(self.raw) }
     }
 }
 

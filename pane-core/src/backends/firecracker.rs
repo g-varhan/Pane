@@ -320,6 +320,11 @@ impl FirecrackerVm {
         Ok(())
     }
 
+    /// Returns the PID of the running Firecracker child process if it has been spawned.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().and_then(|c| c.id())
+    }
+
     /// Standard kill implementation.
     pub async fn kill(&mut self) -> Result<()> {
         if let Some(ref mut child) = self.child {

@@ -124,6 +124,39 @@ impl<State: VmState> Vm<State> {
         &self.backend
     }
 
+    /// Returns the process ID (PID) of the underlying VM backend if it is running.
+    pub fn pid(&self) -> Option<u32> {
+        match &self.backend {
+            VmBackend::Firecracker(fc) => fc.pid(),
+            VmBackend::Native(safe_vm) => {
+                let raw_pid = safe_vm.get_pid();
+                if raw_pid > 0 {
+                    Some(raw_pid as u32)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Automatically registers the VM's process PID with its dedicated cgroup if running.
+    fn ensure_cgroup_attached(&self) -> Result<()> {
+        if let Some(pid) = self.pid() {
+            if pid != std::process::id() {
+                let cg = crate::resources::CgroupManager::create(&self.id)?;
+                cg.attach_pid(pid)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Applies resource controls to this VM's cgroup limits.
+    pub fn apply_resources(&self, resources: &crate::resources::ResourceControls) -> Result<()> {
+        let cg = crate::resources::CgroupManager::create(&self.id)?;
+        cg.apply(resources)?;
+        Ok(())
+    }
+
     /// Helper to cleanup underlying VM resources (killing processes, removing sockets).
     async fn cleanup(&mut self) -> Result<()> {
         match &mut self.backend {
@@ -133,6 +166,10 @@ impl<State: VmState> Vm<State> {
             VmBackend::Native(_) => {
                 // SafeVm auto-destroys on drop.
             }
+        }
+        // Clean up cgroup directory
+        if let Ok(cg) = crate::resources::CgroupManager::create(&self.id) {
+            let _ = cg.destroy();
         }
         Ok(())
     }
@@ -200,7 +237,11 @@ impl Vm<Spawning> {
     /// ```
     pub async fn spawn(&mut self) -> Result<()> {
         match &mut self.backend {
-            VmBackend::Firecracker(fc) => fc.spawn().await,
+            VmBackend::Firecracker(fc) => {
+                fc.spawn().await?;
+                self.ensure_cgroup_attached()?;
+                Ok(())
+            }
             VmBackend::Native(_) => Ok(()),
         }
     }
@@ -359,12 +400,14 @@ impl Vm<Spawning> {
             VmBackend::Firecracker(fc) => fc.start().await?,
             VmBackend::Native(_) => {}
         }
-        Ok(Vm {
+        let running_vm = Vm {
             id: self.id,
             backend: self.backend,
             vsock_cid: self.vsock_cid,
             _state: PhantomData,
-        })
+        };
+        running_vm.ensure_cgroup_attached()?;
+        Ok(running_vm)
     }
 
     /// Instantly destroys the Spawning VM and transitions to Dead.

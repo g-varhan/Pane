@@ -434,3 +434,11 @@ pane_backend_t pane_vm_get_backend(const pane_vm_t *vm) {
     if (!vm) return PANE_BACKEND_NATIVE;
     return vm->backend;
 }
+
+int pane_vm_get_pid(const pane_vm_t *vm) {
+    if (!vm) return -EINVAL;
+    if (vm->backend == PANE_BACKEND_QEMU) {
+        return (int)vm->qemu_pid;
+    }
+    return (int)getpid();
+}
