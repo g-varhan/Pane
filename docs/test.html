@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Comprehensive Testing Guide for Pane - Learn how to test Go, Rust, and C components of the KVM microVM lifecycle control plane.">
+  <title>Pane — Comprehensive Testing Guide</title>
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* Theme color tokens */
+      --bg-dark: oklch(14% 0.03 240);
+      --bg-card: oklch(18% 0.04 240 / 0.7);
+      --border-color: oklch(25% 0.05 240 / 0.6);
+
+      --color-primary-light: oklch(65% 0.22 250);
+      --color-primary-dark: oklch(75% 0.18 250);
+      --color-primary: light-dark(var(--color-primary-light), var(--color-primary-dark));
+
+      --color-accent-cyan: oklch(78% 0.15 190);
+      --color-accent-emerald: oklch(76% 0.16 145);
+
+      --text-main: light-dark(oklch(20% 0.02 240), oklch(92% 0.01 240));
+      --text-subtle: light-dark(oklch(45% 0.03 240), oklch(72% 0.02 240));
+
+      color-scheme: dark light;
+      accent-color: var(--color-primary);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection {
+      background-color: var(--color-primary);
+      color: var(--bg-dark);
+    }
+
+    :root {
+      --scrollbar-track: oklch(12% 0.03 240);
+      --scrollbar-thumb: oklch(30% 0.05 240);
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    header {
+      padding: 2rem 0;
+      border-bottom: 1px solid var(--border-color);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background-color: oklch(14% 0.03 240 / 0.8);
+    }
+
+    .nav-wrapper {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 800;
+      font-size: 1.75rem;
+      letter-spacing: -0.05em;
+      background: linear-gradient(135deg, var(--color-primary-dark), var(--color-accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+    }
+
+    .nav-links a {
+      color: var(--text-subtle);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.2s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--color-primary);
+    }
+
+    .github-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      background-color: oklch(18% 0.04 240 / 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .github-link:hover {
+      background-color: oklch(22% 0.05 240 / 0.8);
+      border-color: var(--color-primary);
+      transform: translateY(-1px);
+    }
+
+    .content {
+      max-width: 800px;
+      margin: 4rem auto;
+      padding: 0 1rem;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      color: #fff;
+      line-height: 1.2;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      font-weight: 800;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(to right bottom, #fff 40%, oklch(80% 0.02 240));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-top: 0;
+    }
+
+    h2 {
+      font-size: 2rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.5rem;
+    }
+
+    p {
+      color: var(--text-subtle);
+      margin-bottom: 1.5rem;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background-color: oklch(18% 0.04 240);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+      border: 1px solid var(--border-color);
+    }
+
+    pre {
+      background-color: oklch(10% 0.03 240);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.5rem;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      border: none;
+      font-size: 0.9rem;
+      color: #fff;
+    }
+
+    ul {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+      color: var(--text-subtle);
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+    }
+
+    footer {
+      padding: 3rem 0;
+      border-top: 1px solid var(--border-color);
+      background-color: oklch(12% 0.03 240);
+      margin-top: 6rem;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .footer-links a {
+      color: var(--text-subtle);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--color-primary);
+    }
+
+    footer p {
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+      .container {
+        padding: 0 1rem;
+      }
+      .nav-links {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Nav -->
+  <header>
+    <div class="container nav-wrapper">
+      <div class="logo-group">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-primary)">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+          <line x1="9" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="15" x2="21" y2="15"/>
+        </svg>
+        Pane
+      </div>
+      <nav class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getstarted.html">Get Started</a>
+        <a href="test.html" style="color: var(--color-primary);">Testing Guide</a>
+      </nav>
+      <a href="https://github.com/g-varhan/Pane" class="github-link" target="_blank" rel="noopener noreferrer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-main);">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+        </svg>
+        <span style="color: var(--text-main); font-weight: 500; font-size: 0.9rem;">GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="content">
+      <h1>Comprehensive Testing Guide</h1>
+      <p>Pane is composed of three decoupled core layers: <strong>pane-vmm</strong> (C, raw hypervisor ioctls), <strong>pane-core</strong> (Rust, state machines & cgroups), and <strong>pane-api / pane-cli</strong> (Go, schema config & OCI converter). To ensure stability, high performance, and zero regressions, Pane maintains a comprehensive test suite across all three tiers.</p>
+
+      <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+
+      <h2>1. Automated Test Suites</h2>
+
+      <h3>Go CLI & Configuration Tests (`pane-api` / `pane-cli`)</h3>
+      <p>The Go tests cover schema validation, configuration merge precedence rules (CLI overrides > yaml config > metadata defaults), and container layer extraction whiteouts mapping.</p>
+      <pre><code># Run all Go tests including OCI layer conversions
+go test -v ./...
+</code></pre>
+      <p><strong>Key test case:</strong> <code>TestPullContainerImage</code> dynamically pulls <code>docker://busybox</code>, unpacks layer tarballs, compiles the guest <code>init</code> statically on the host, creates an ext4 disk image using <code>mke2fs</code>, and downloads the Firecracker kernel.</p>
+
+      <h3>Rust Core Orchestrator Tests (`pane-core`)</h3>
+      <p>The Rust test suite verifies VM state transitions, cgroup v2 resource limit enforcement, vsock command execution framing, eBPF TC networking rules, and parent snapshot forking benchmarks.</p>
+      <pre><code># Run all Rust unit and integration tests
+cd pane-core
+cargo test
+</code></pre>
+      <p><strong>Key test cases:</strong>
+        <ul>
+          <li><code>test_cgroups_lifecycle_and_limits</code>: Checks cgroup v2 memory/CPU throttle hooks.</li>
+          <li><code>test_fork_50_vms</code>: Benchmarks cloning 50 VMs from a snapshot in under 2 seconds.</li>
+          <li><code>test_agent_exec_success</code>: Tests vsock connection execution rounds on loopback.</li>
+        </ul>
+      </p>
+
+      <h3>C Hypervisor Library Tests (`pane-vmm`)</h3>
+      <p>The C tests directly exercise raw KVM ioctls, memory slot allocations, virtio-mmio setup, and benchmark <code>io_uring</code> performance against synchronous sys calls.</p>
+      <pre><code># Run all C backend tests
+cd pane-vmm
+make test
+</code></pre>
+      <p><strong>Key benchmarks:</strong>
+        <ul>
+          <li><code>test_create_destroy</code>: Spawns and destroys 1,000 VMs sequentially to guarantee zero file descriptor (FD) leaks.</li>
+          <li><code>test_firecracker</code>: Validates that VM boots a 64-bit payload within the target limits (&lt; 5ms).</li>
+          <li><code>test_uring_bench</code>: Confirms that <code>io_uring</code> read throughput exceeds synchronous syscalls by at least 15% (typically ~150-200% improvement).</li>
+        </ul>
+      </p>
+
+      <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+
+      <h2>2. Manual Integration Testing</h2>
+      <p>To verify the entire CLI end-to-end integration with the active API daemon, execute the following manual testing steps:</p>
+
+      <h3>Step 1: Start the API Daemon</h3>
+      <p>Fire up the Pane daemon specifying a writeable local UNIX socket:</p>
+      <pre><code># Start the daemon in the background
+pane daemon start --socket /tmp/pane.sock &
+</code></pre>
+
+      <h3>Step 2: Pull Test Images</h3>
+      <p>Verify that different image schemes resolve and download correctly:</p>
+      <pre><code># 1. Local copy test (copies/links Tiny10 Windows image & VirtIO drivers)
+pane pull tiny10
+
+# 2. Remote CDN download test (downloads Alpine Virt ISO)
+pane pull alpine
+
+# 3. OCI/Docker container conversion test (pulls, flattens, formats)
+pane pull docker://alpine:latest
+</code></pre>
+
+      <h3>Step 3: List and Inspect Image Metadata</h3>
+      <p>Check if the local cache registers and exposes the specs correctly:</p>
+      <pre><code># List all cached images and virtual disk sizes
+pane images
+
+# Inspect spec defaults for the container-derived image
+pane image inspect alpine-latest
+</code></pre>
+
+      <h3>Step 4: Dry-Run VM Boot</h3>
+      <p>Verify that CLI flags merge cleanly over image metadata:</p>
+      <pre><code># Test merge precedence: CLI overrides memory and vCPUs
+pane run --dry-run --cpus 4 --memory 2GiB alpine-latest
+</code></pre>
+
+      <h3>Step 5: Run VM & Exec Commands</h3>
+      <p>Boot the VM and execute a loopback command via vsock:</p>
+      <pre><code># Spawn the VM
+pane run --name app-vm alpine-latest
+
+# Execute shell command inside the guest VM
+pane exec app-vm -- uname -a
+
+# Stop and reclaim resources
+pane rm app-vm
+</code></pre>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="getstarted.html">Get Started</a>
+        <a href="test.html">Testing Guide</a>
+        <a href="https://github.com/g-varhan/Pane">GitHub</a>
+      </div>
+      <p>© 2026 Pane Hypervisor Project. Released under the Apache 2.0 License.</p>
+    </div>
+  </footer>
+</body>
+</html>
