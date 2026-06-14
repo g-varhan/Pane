@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Getting Started with Pane - A modular, high-performance hypervisor orchestration engine">
+  <title>Getting Started with Pane</title>
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* Theme color tokens */
+      --bg-dark: oklch(14% 0.03 240);
+      --bg-card: oklch(18% 0.04 240 / 0.7);
+      --border-color: oklch(25% 0.05 240 / 0.6);
+
+      --color-primary-light: oklch(65% 0.22 250);
+      --color-primary-dark: oklch(75% 0.18 250);
+      --color-primary: light-dark(var(--color-primary-light), var(--color-primary-dark));
+
+      --color-accent-cyan: oklch(78% 0.15 190);
+      --color-accent-emerald: oklch(76% 0.16 145);
+
+      --text-main: light-dark(oklch(20% 0.02 240), oklch(92% 0.01 240));
+      --text-subtle: light-dark(oklch(45% 0.03 240), oklch(72% 0.02 240));
+
+      color-scheme: dark light;
+      accent-color: var(--color-primary);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Selection styling */
+    ::selection {
+      background-color: var(--color-primary);
+      color: var(--bg-dark);
+    }
+
+    /* Scrollbar */
+    :root {
+      --scrollbar-track: oklch(12% 0.03 240);
+      --scrollbar-thumb: oklch(30% 0.05 240);
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* Header / Nav */
+    header {
+      padding: 2rem 0;
+      border-bottom: 1px solid var(--border-color);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background-color: oklch(14% 0.03 240 / 0.8);
+    }
+
+    .nav-wrapper {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 800;
+      font-size: 1.75rem;
+      letter-spacing: -0.05em;
+      background: linear-gradient(135deg, var(--color-primary-dark), var(--color-accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+    }
+
+    .nav-links a {
+      color: var(--text-subtle);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.2s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--color-primary);
+    }
+
+    .github-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      background-color: oklch(18% 0.04 240 / 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .github-link:hover {
+      background-color: oklch(22% 0.05 240 / 0.8);
+      border-color: var(--color-primary);
+      transform: translateY(-1px);
+    }
+
+    /* Content styling */
+    .content {
+      max-width: 800px;
+      margin: 4rem auto;
+      padding: 0 1rem;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      color: #fff;
+      line-height: 1.2;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      font-weight: 800;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(to right bottom, #fff 40%, oklch(80% 0.02 240));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    h2 {
+      font-size: 2rem;
+    }
+
+    h3 {
+      font-size: 1.75rem;
+    }
+
+    h4 {
+      font-size: 1.5rem;
+    }
+
+    p {
+      color: var(--text-subtle);
+      margin-bottom: 1.5rem;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background-color: oklch(18% 0.04 240);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+      border: 1px solid var(--border-color);
+    }
+
+    pre {
+      background-color: oklch(10% 0.03 240);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.5rem;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      border: none;
+      font-size: 0.9rem;
+      color: #fff;
+    }
+
+    blockquote {
+      border-left: 4px solid var(--color-primary);
+      padding-left: 1.5rem;
+      margin: 2rem 0;
+      color: var(--text-subtle);
+      font-style: italic;
+    }
+
+    hr {
+      border: 0;
+      height: 1px;
+      background: var(--border-color);
+      margin: 3rem 0;
+    }
+
+    ul, ol {
+      margin-left: 2rem;
+      margin-bottom: 1.5rem;
+      color: var(--text-subtle);
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+    }
+
+    a {
+      color: var(--color-primary);
+      text-decoration: none;
+      border-bottom: 1px solid var(--color-primary);
+    }
+
+    a:hover {
+      opacity: 0.8;
+    }
+
+    .btn {
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 0.85rem 1.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .btn-primary {
+      background-color: var(--color-primary);
+      color: var(--bg-dark);
+      border: none;
+      box-shadow: 0 4px 20px oklch(65% 0.22 250 / 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px oklch(65% 0.22 250 / 0.45);
+      filter: brightness(1.1);
+    }
+
+    .btn-secondary {
+      background-color: oklch(18% 0.04 240 / 0.6);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      background-color: oklch(22% 0.05 240 / 0.8);
+      border-color: var(--text-subtle);
+      transform: translateY(-2px);
+    }
+
+    /* Footer */
+    footer {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border-color);
+      color: var(--text-subtle);
+      font-size: 0.9rem;
+      text-align: center;
+      margin-top: 6rem;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .footer-links a {
+      color: var(--text-subtle);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--color-primary);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+
+      .container {
+        padding: 0 1rem;
+      }
+
+      .nav-links {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Nav -->
+  <header>
+    <div class="container nav-wrapper">
+      <div class="logo-group">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-primary)">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+          <line x1="9" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="15" x2="21" y2="15"/>
+        </svg>
+        Pane
+      </div>
+      <nav class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="#features">Primitives</a>
+        <a href="#technology">Tech Stack</a>
+      </nav>
+      <a href="https://github.com/g-varhan/Pane" class="github-link" target="_blank" rel="noopener noreferrer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-main);">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+        </svg>
+        <span style="color: var(--text-main); font-weight: 500; font-size: 0.9rem;">GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="content">
+      <!-- Getting Started Content -->
+      <h1>Getting Started with Pane</h1>
+
+      <p>Welcome to <strong>Pane</strong> — a modular, high-performance hypervisor orchestration engine. Pane gives you bare-metal performance with microVM convenience, blending Rust speed, KVM control, <code>io_uring</code> storage throughput, eBPF micro-segmentation, and Go's ease of integration.</p>
+
+      <p>Whether you're sandboxing a local tool, building a serverless SaaS platform, or running full VM stacks, this guide will get you up and running.</p>
+
+      <hr>
+
+      <h2>1. Local Sandboxing (The Solo Developer flow)</h2>
+
+      <p>For local development or command-line testing, Pane supports a lightweight Firecracker backend designed for direct kernel booting. It bypasses heavy bios/bootloaders, booting a Linux kernel in <strong>sub-1ms</strong>.</p>
+
+      <h3>Prerequisites</h3>
+      <p>Make sure your development machine has KVM enabled and you have read/write access to <code>/dev/kvm</code>:</p>
+      <pre><code>ls -l /dev/kvm
+# If needed, add yourself to the kvm group:
+sudo usermod -aG kvm $USER
+</code></pre>
+
+      <h3>Spawning your first microVM</h3>
+      <p>Using the Go gRPC client or by calling the FFI functions directly, you can boot a microVM.</p>
+
+      <pre><code>package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	pb "pane/pane-api/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+func main() {
+	// 1. Connect to the Pane gRPC daemon
+	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("Failed to connect: %v", err)
+	}
+	defer conn.Close()
+	client := pb.NewPaneServiceClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 2. Boot a microVM with a direct kernel boot config
+	resp, err := client.Spawn(ctx, &pb.SpawnRequest{
+		Id:          "sandbox-vm-1",
+		KernelPath:  "/path/to/vmlinux",
+		RootfsPath:  "/path/to/rootfs.img",
+		VcpuCount:   1,
+		MemSizeMib:  128,
+		BootArgs:    "console=ttyS0 reboot=k panic=1 pci=off",
+	})
+	if err != nil {
+		log.Fatalf("Failed to spawn VM: %v", err)
+	}
+
+	fmt.Printf("VM Booted! ID: %s, Vsock CID: %d, PID: %d\n", resp.Id, resp.VsockCid, resp.Pid)
+}
+</code></pre>
+
+      <hr>
+
+      <h2>2. Architecting for Scale (The High-End Production flow)</h2>
+
+      <p>When building a high-density host environment, you need resource isolation, network micro-segmentation, and instant scalability. Pane handles this without heavy hypervisor layers or complex corporate setups.</p>
+
+      <h3>Resource Controls via cgroup v2</h3>
+      <p>Pane automatically creates a dedicated cgroup directory for every VM. You can dynamically apply CPU scheduling, memory limits, and process limits:</p>
+      <ul>
+        <li><strong>Memory Caps</strong>: Enforce tight bounds (e.g., 256MB RAM). If the guest runs Out of Memory, KVM traps the process inside the cgroup, protecting the host system from crashing.</li>
+        <li><strong>CPU Quotas</strong>: Limit CPU shares to ensure fair scheduling across co-located tenants.</li>
+      </ul>
+
+      <h3>Network Micro-segmentation with eBPF (<code>aya</code>)</h3>
+      <p>Instead of clogging host routing tables with thousands of complex <code>iptables</code> or <code>nftables</code> rules, Pane compiles a custom eBPF packet classifier (<a href="file:///home/varhan/projects/pane/pane-core/src/bpf/pane_filter.bpf.c">pane_filter.bpf.c</a>) and attaches it directly to the host TAP device ingress using <strong>Traffic Control (TC)</strong>.</p>
+      <ul>
+        <li>VMs are assigned to group IDs.</li>
+        <li>eBPF inspects IPv4 packet headers on the host interface.</li>
+        <li>Communication between VMs of different groups is dropped at the lowest kernel layer with <strong>zero overhead</strong>.</li>
+      </ul>
+
+      <h3>Instant Cloning (Forking)</h3>
+      <p>For serverless scaling, boot-up time is critical. Rather than starting a VM from scratch, Pane lets you freeze a running VM, write its memory and device state to a snapshot, and instantly fork clones:</p>
+      <ul>
+        <li><strong>Benchmark</strong>: Clone 50 VMs from a single parent snapshot in <strong>under 2 seconds total wall-time</strong>.</li>
+        <li><strong>CoW Memory</strong>: Uses Copy-on-Write memory mapping to share parent pages until modified, minimizing RAM consumption.</li>
+      </ul>
+
+      <hr>
+
+      <h2>3. Running Custom ISOs & Windows on Pane</h2>
+
+      <p>Pane's default <code>Spawning</code> state leverages Firecracker for speed, but the C-layer hypervisor <code>pane-vmm</code> contains a fully functional <strong>QEMU Backend</strong> designed to run custom ISOs, full operating systems (like Ubuntu Server), or Windows.</p>
+
+      <p>Under the hood, the QEMU backend instantiates a standard PCI bus layout with virtual drivers suitable for full hardware emulation.</p>
+
+      <h3>The QEMU Invocation</h3>
+      <p>When you transition a VM to QEMU mode in <code>pane-vmm</code> via <a href="file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c#L58-L110">pane_vm_setup_qemu_mode</a>, it spawns:</p>
+
+      <pre><code>qemu-system-x86_64 -enable-kvm -m 128 -smp 1 -display none -nographic -drive file=&lt;image_path&gt;,format=raw,if=virtio -qmp unix:&lt;qmp_socket_path&gt;,server,nowait -serial none
+</code></pre>
+
+      <h3>Step 1: Preparing files for Custom / Windows ISO</h3>
+      <p>Because installing Windows or running a full desktop ISO requires more resources (e.g., graphics/VNC, at least 4GB of RAM, and multiple drives), you will want to customize the QEMU command-line parameters.</p>
+
+      <ol>
+        <li><strong>Create a blank virtual disk image</strong> (for the OS installation destination):
+          <pre><code>qemu-img create -f qcow2 windows_install.qcow2 40G
+</code></code></pre>
+        </li>
+        <li><strong>Download the ISO</strong>: Place your Windows ISO (e.g. <code>Win10_Installer.iso</code>) or Custom Linux ISO (e.g. <code>ubuntu.iso</code>) in an accessible directory.</li>
+      </ol>
+
+      <h3>Step 2: Customizing the QEMU Backend in Pane</h3>
+      <p>To run heavy OS installs, open <a href="file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c#L83-L103">pane-vmm/src/backends/qemu.c</a> and customize the boot parameters to support larger memory limits, attach the ISO, and enable VNC display access:</p>
+
+      <pre><code>         char *args[] = {
+             "qemu-system-x86_64",
+             "-enable-kvm",
+-            "-m", "128",
+-            "-smp", "1",
+-            "-display", "none",
+-            "-nographic",
++            "-m", "4096",              // Allocate 4GB RAM for Windows
++            "-smp", "4",               // Allocate 4 vCPUs
++            "-vnc", ":1",              // Enable VNC display on port 5901 for graphical installation
+             "-drive", NULL,            // Destination drive (customized below)
++            "-cdrom", "/path/to/installer.iso", // ISO Installer
+             "-qmp", NULL,
+             "-serial", "none",
+             NULL
+         };
+</code></pre>
+
+      <p><em>Tip: If you're running headless on a server, mapping the VNC port (<code>:1</code> translates to port <code>5901</code> on the host) allows you to connect with any standard VNC client to interact with the OS GUI installer.</em></p>
+
+      <h3>Step 3: Launching the Installation</h3>
+      <p>Compile the updated VMM library and call <code>pane_vm_setup_qemu_mode</code> passing the path to the blank destination disk:</p>
+
+      <pre><code>// Setup the VM in QEMU mode to begin the ISO installation
+err := ffi.SetupQemuMode("windows_install.qcow2", "/run/pane/qmp.sock")
+if err != nil {
+    log.Fatalf("Failed to initialize QEMU install: %v", err)
+}
+</code></pre>
+
+      <p>Once installation is finished, you can remove the <code>-cdrom</code> installer flag from <a href="file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c">qemu.c</a> and boot directly from your newly populated <code>windows_install.qcow2</code> drive.</p>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="#features">Primitives</a>
+        <a href="#technology">Technology</a>
+        <a href="https://github.com/g-varhan/Pane">GitHub</a>
+      </div>
+      <p>© 2026 Pane Hypervisor Project. Released under the Apache 2.0 License.</p>
+    </div>
+  </footer>
+</body>
+</html>
