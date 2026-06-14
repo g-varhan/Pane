@@ -31,5 +31,6 @@ jobs:
 
     - name: Run Tests and Benchmarks
       run: |
-        # Run tests (sudo ensures /dev/kvm permissions if group change isn't picked up)
-        sudo make test
+        # Increase the open file descriptor limit because test_create_destroy creates 1000 VMs
+        # which exceeds the default 1024 limit on GitHub Actions runners.
+        sudo bash -c "ulimit -n 4096 && make test"
