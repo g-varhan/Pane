@@ -1,7 +1,7 @@
 package ffi
 
 /*
-#cgo LDFLAGS: -L../../pane-core/target/debug -lpane_core -L../../pane-vmm -lpane_vmm -luring -ldl -lpthread -lm
+#cgo LDFLAGS: -L../../pane-core/target/debug -L../../pane-core/target/release -L../../pane-vmm -lpane_core -lpane_vmm -luring -ldl -lpthread -lm
 #include <stdint.h>
 #include <stdlib.h>
 
