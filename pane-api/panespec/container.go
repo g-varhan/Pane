@@ -88,7 +88,14 @@ func PullContainerImage(ref, targetDir string) error {
 			}
 
 			// Resolve target path
-			target := filepath.Join(tempRootfsDir, filepath.Clean(header.Name))
+			target, err := secureJoin(tempRootfsDir, header.Name)
+			if err != nil {
+				rc.Close()
+				if gr != nil {
+					gr.Close()
+				}
+				return fmt.Errorf("invalid path in tar archive: %w", err)
+			}
 
 			// Handle whiteouts (.wh.*)
 			base := filepath.Base(header.Name)
@@ -96,7 +103,10 @@ func PullContainerImage(ref, targetDir string) error {
 			if strings.HasPrefix(base, ".wh.") {
 				if base == ".wh..wh..opq" {
 					// Opaque whiteout: delete all contents of the directory
-					targetDirToDelete := filepath.Join(tempRootfsDir, filepath.Clean(dir))
+					targetDirToDelete, err := secureJoin(tempRootfsDir, dir)
+					if err != nil {
+						continue // skip invalid whiteout paths
+					}
 					entries, err := os.ReadDir(targetDirToDelete)
 					if err == nil {
 						for _, entry := range entries {
@@ -106,7 +116,10 @@ func PullContainerImage(ref, targetDir string) error {
 				} else {
 					// Single file whiteout: delete the target file
 					fileToDelete := strings.TrimPrefix(base, ".wh.")
-					_ = os.RemoveAll(filepath.Join(tempRootfsDir, filepath.Clean(dir), fileToDelete))
+					dirToDelete, err := secureJoin(tempRootfsDir, dir)
+					if err == nil {
+						_ = os.RemoveAll(filepath.Join(dirToDelete, fileToDelete))
+					}
 				}
 				continue
 			}
@@ -152,7 +165,14 @@ func PullContainerImage(ref, targetDir string) error {
 			case tar.TypeLink:
 				_ = os.MkdirAll(filepath.Dir(target), 0755)
 				_ = os.Remove(target)
-				oldPath := filepath.Join(tempRootfsDir, filepath.Clean(header.Linkname))
+				oldPath, err := secureJoin(tempRootfsDir, header.Linkname)
+				if err != nil {
+					rc.Close()
+					if gr != nil {
+						gr.Close()
+					}
+					return fmt.Errorf("invalid link target path in tar archive: %w", err)
+				}
 				if err := os.Link(oldPath, target); err != nil {
 					rc.Close()
 					if gr != nil {
@@ -330,6 +350,24 @@ func PullContainerImage(ref, targetDir string) error {
 
 	fmt.Printf("Successfully converted %s OCI container to bootable Pane image!\n", ref)
 	return nil
+}
+
+func secureJoin(base, path string) (string, error) {
+	base = filepath.Clean(base)
+
+	// Make the path relative to root by prepending / and cleaning.
+	// This evaluates dot-dot components within the path itself,
+	// effectively chrooting it to / so it can't break out.
+	// E.g., "/../../etc/passwd" -> "/etc/passwd"
+	cleanedPath := strings.TrimPrefix(filepath.Clean("/"+path), "/")
+
+	joined := filepath.Join(base, cleanedPath)
+
+	// Paranoia check: verify that joined still starts with base
+	if !strings.HasPrefix(joined, base+string(filepath.Separator)) && joined != base {
+		return "", fmt.Errorf("path traversal attempt: %s", path)
+	}
+	return joined, nil
 }
 
 func dirSize(path string) (int64, error) {
