@@ -4,15 +4,15 @@ pkgver=0.1.0
 pkgrel=1
 pkgdesc="A modular, high-performance hypervisor orchestration engine using KVM, io_uring, and eBPF"
 arch=('x86_64')
-url="https://github.com/g-varhan/Pane"
+url="https://github.com/pane-vmm/pane"
 license=('Apache-2.0')
 depends=('liburing' 'glibc')
 makedepends=('rust' 'go' 'clang' 'make')
-source=("git+https://github.com/g-varhan/Pane.git")
+source=("git+https://github.com/pane-vmm/pane.git")
 sha256sums=('SKIP')
 
 build() {
-  cd "$srcdir/Pane"
+  cd "$srcdir/pane"
   
   # 1. Build C VMM static library
   make -C pane-vmm clean
@@ -28,7 +28,7 @@ build() {
 }
 
 package() {
-  cd "$srcdir/Pane"
+  cd "$srcdir/pane"
   
   # Install binaries
   install -Dm755 pane-api/pane-api "$pkgdir/usr/bin/pane-api"

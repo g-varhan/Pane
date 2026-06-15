@@ -200,7 +200,7 @@ SUCCESS: io_uring sequential read throughput exceeded direct syscall baseline by
 
 ```
 $ cargo clippy --all-targets -- -D warnings
-    Checking pane-core v0.1.0 (/home/varhan/projects/pane/pane-core)
+    Checking pane-core v0.1.0 (/usr/src/pane/pane-core)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.78s
 ```
 

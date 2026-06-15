@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package server
 
 import (
@@ -81,4 +83,3 @@ func TestPaneServiceValidation(t *testing.T) {
 		}
 	})
 }
-

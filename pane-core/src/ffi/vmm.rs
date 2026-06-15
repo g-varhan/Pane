@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::error::{check_ffi, Result};
 use std::ffi::CString;
 
@@ -167,6 +169,12 @@ extern "C" {
         max_len: libc::size_t,
     ) -> libc::c_int;
     fn pane_vm_get_pid(vm: *const pane_vm) -> libc::c_int;
+    fn pane_vm_reconstruct_qemu(
+        vm_out: *mut *mut pane_vm,
+        vm_id: *const libc::c_char,
+        qemu_pid: libc::c_int,
+        qmp_socket_path: *const libc::c_char,
+    ) -> libc::c_int;
 }
 
 /// A safe, typed Rust wrapper managing the raw `pane_vm_t` structure lifecycle.
@@ -255,6 +263,7 @@ impl SafeVm {
 
     /// Gets general purpose registers for a vCPU.
     pub fn vcpu_get_regs(&self, vcpu_id: u32) -> Result<kvm_regs> {
+        // SAFETY: kvm_regs is a plain old data struct (integer fields only), so zeroing it is safe and does not produce invalid bit patterns.
         let mut regs: kvm_regs = unsafe { std::mem::zeroed() };
         // SAFETY: The raw pointer is valid, and regs pointer is valid.
         let ret = unsafe { pane_vm_vcpu_get_regs(self.raw, vcpu_id, &mut regs) };
@@ -272,6 +281,7 @@ impl SafeVm {
 
     /// Gets special/segment registers for a vCPU.
     pub fn vcpu_get_sregs(&self, vcpu_id: u32) -> Result<kvm_sregs> {
+        // SAFETY: kvm_sregs is a plain old data struct (integer fields only), so zeroing it is safe and does not produce invalid bit patterns.
         let mut sregs: kvm_sregs = unsafe { std::mem::zeroed() };
         // SAFETY: The raw pointer is valid, and sregs pointer is valid.
         let ret = unsafe { pane_vm_vcpu_get_sregs(self.raw, vcpu_id, &mut sregs) };
@@ -342,7 +352,14 @@ impl SafeVm {
     }
 
     /// Configures the VM for QEMU mode, spawning QEMU with KVM acceleration and QMP.
-    pub fn setup_qemu_mode(&self, config: *const pane_vmm_config_t, qmp_socket_path: &str) -> Result<()> {
+    ///
+    /// # Safety
+    /// The caller must ensure that `config` points to a valid, fully initialized `pane_vmm_config_t` structure.
+    pub unsafe fn setup_qemu_mode(
+        &self,
+        config: *const pane_vmm_config_t,
+        qmp_socket_path: &str,
+    ) -> Result<()> {
         let c_qmp = CString::new(qmp_socket_path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         // SAFETY: The raw pointer is valid, and C strings are null-terminated.
@@ -384,6 +401,26 @@ impl SafeVm {
     pub fn get_pid(&self) -> i32 {
         // SAFETY: The raw pointer is valid.
         unsafe { pane_vm_get_pid(self.raw) }
+    }
+
+    /// Reconstructs a running QEMU VM structure.
+    pub fn reconstruct_qemu(vm_id: &str, qemu_pid: i32, qmp_socket_path: &str) -> Result<Self> {
+        let c_id = CString::new(vm_id)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        let c_qmp = CString::new(qmp_socket_path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        let mut raw = std::ptr::null_mut();
+        // SAFETY: pane_vm_reconstruct_qemu writes a valid pointer on success.
+        let ret =
+            unsafe { pane_vm_reconstruct_qemu(&mut raw, c_id.as_ptr(), qemu_pid, c_qmp.as_ptr()) };
+        check_ffi(ret, "Reconstruct QEMU VM")?;
+        if raw.is_null() {
+            return Err(crate::error::PaneError::Vmm(
+                libc::ENOMEM,
+                "pane_vm_reconstruct_qemu returned null pointer".to_string(),
+            ));
+        }
+        Ok(Self { raw })
     }
 }
 

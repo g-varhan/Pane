@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Pane Uninstaller — https://github.com/g-varhan/Pane
+#  Pane Uninstaller — https://github.com/pane-vmm/pane
 #
 #  Removes the Pane binary, libraries, runtime directories, and systemd
 #  service from the system. Preserves VM images and snapshots by default.
@@ -162,5 +162,5 @@ if [ "$PURGE" = false ]; then
   echo -e "  To also remove them, re-run: ${CYAN}bash uninstall.sh --purge${NC}"
 fi
 echo ""
-echo -e "  Thank you for using Pane! ⭐ https://github.com/g-varhan/Pane"
+echo -e "  Thank you for using Pane! ⭐ https://github.com/pane-vmm/pane"
 echo ""

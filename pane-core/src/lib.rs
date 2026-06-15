@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 pub mod backends;
 pub mod error;
 pub mod exec;
@@ -17,4 +19,14 @@ pub use network::{
     unregister_vm_network_group,
 };
 pub use resources::{CgroupManager, CpuMaxLimit, ResourceControls};
-pub use vm::{Dead, Frozen, Running, Spawning, Vm, VmBackend, VmState};
+pub use vm::{cow_clone_rootfs, Dead, Frozen, Running, Spawning, Vm, VmBackend, VmState};
+
+pub(crate) fn is_run_pane_writable() -> bool {
+    let test_file = std::path::Path::new("/run/pane/.tmp_write_test");
+    if std::fs::write(test_file, "").is_ok() {
+        let _ = std::fs::remove_file(test_file);
+        true
+    } else {
+        false
+    }
+}

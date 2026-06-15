@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::backends::{BootSource, Drive, MachineConfig};
 use crate::error::PaneError;
 use crate::exec::ExecChunk;
-use crate::vm::{Running, Spawning, Vm};
 use crate::ffi::vmm::pane_vmm_config_t;
 use crate::ffi::SafeVm;
+use crate::vm::{Running, Spawning, Vm};
 use std::ffi::CStr;
 use tokio::runtime::Runtime;
 
@@ -54,10 +56,9 @@ pub unsafe extern "C" fn pane_core_spawn(
         let vmm_type_str = if cfg.vmm_type.is_null() {
             "firecracker"
         } else {
-            match CStr::from_ptr(cfg.vmm_type).to_str() {
-                Ok(s) => s,
-                Err(_) => "firecracker",
-            }
+            CStr::from_ptr(cfg.vmm_type)
+                .to_str()
+                .unwrap_or("firecracker")
         };
 
         if vmm_type_str == "qemu" {
@@ -67,8 +68,7 @@ pub unsafe extern "C" fn pane_core_spawn(
                 Err(e) => return error_to_errno(e),
             };
 
-            let run_pane = std::path::Path::new("/run/pane");
-            let qmp_socket_path = if run_pane.exists() || std::fs::create_dir_all(run_pane).is_ok() {
+            let qmp_socket_path = if crate::is_run_pane_writable() {
                 format!("/run/pane/qmp-{}.sock", id_str)
             } else {
                 let tmp_pane = std::path::Path::new("/tmp/pane");
@@ -134,6 +134,7 @@ pub unsafe extern "C" fn pane_core_spawn(
                 track_dirty_pages: Some(true),
             };
             if let Err(e) = vm.configure_machine(&machine_config).await {
+                let _ = vm.destroy().await;
                 return error_to_errno(e);
             }
 
@@ -143,6 +144,7 @@ pub unsafe extern "C" fn pane_core_spawn(
                     boot_args: boot_args_str,
                 };
                 if let Err(e) = vm.configure_boot_source(&boot_source).await {
+                    let _ = vm.destroy().await;
                     return error_to_errno(e);
                 }
             }
@@ -155,6 +157,7 @@ pub unsafe extern "C" fn pane_core_spawn(
                     is_read_only: false,
                 };
                 if let Err(e) = vm.configure_drive(&drive).await {
+                    let _ = vm.destroy().await;
                     return error_to_errno(e);
                 }
             }
@@ -162,6 +165,7 @@ pub unsafe extern "C" fn pane_core_spawn(
             // Configure a default guest CID (3)
             let guest_cid = 3;
             if let Err(e) = vm.configure_vsock(guest_cid).await {
+                let _ = vm.destroy().await;
                 return error_to_errno(e);
             }
 
@@ -280,6 +284,112 @@ pub unsafe extern "C" fn pane_core_fork(
             Ok(s) => s,
             Err(_) => return -libc::EINVAL,
         };
+
+        if id_str.contains("qemu") {
+            let safe_vm = match SafeVm::create() {
+                Ok(vm) => vm,
+                Err(e) => return error_to_errno(e),
+            };
+
+            let qmp_socket_path = if crate::is_run_pane_writable() {
+                format!("/run/pane/qmp-{}.sock", id_str)
+            } else {
+                let tmp_pane = std::path::Path::new("/tmp/pane");
+                let _ = std::fs::create_dir_all(tmp_pane);
+                format!("/tmp/pane/qmp-{}.sock", id_str)
+            };
+
+            let incoming_arg = format!("exec:cat {}", mem_str);
+            let c_incoming = match CString::new(incoming_arg) {
+                Ok(c) => c,
+                Err(_) => return -libc::EINVAL,
+            };
+            let c_incoming_opt = match CString::new("-incoming") {
+                Ok(c) => c,
+                Err(_) => return -libc::EINVAL,
+            };
+            let extra_args = [c_incoming_opt, c_incoming];
+            let c_extra_args: Vec<*const libc::c_char> = extra_args
+                .iter()
+                .map(|arg| arg.as_ptr())
+                .chain(std::iter::once(std::ptr::null()))
+                .collect();
+
+            let c_id = match CString::new(id_str) {
+                Ok(c) => c,
+                Err(_) => return -libc::EINVAL,
+            };
+            let c_vmm_type = match CString::new("qemu") {
+                Ok(c) => c,
+                Err(_) => return -libc::EINVAL,
+            };
+            let c_disk_path = match CString::new(rootfs_str) {
+                Ok(c) => c,
+                Err(_) => return -libc::EINVAL,
+            };
+            let c_disk_format = match CString::new("raw") {
+                Ok(c) => c,
+                Err(_) => return -libc::EINVAL,
+            };
+
+            let config = pane_vmm_config_t {
+                vm_id: c_id.as_ptr(),
+                vmm_type: c_vmm_type.as_ptr(),
+                vcpus: 1,
+                memory_bytes: 128 * 1024 * 1024,
+                disk_path: c_disk_path.as_ptr(),
+                disk_format: c_disk_format.as_ptr(),
+                virtio_net: false,
+                virtio_blk: true,
+                virtio_rng: false,
+                net_bridge: std::ptr::null(),
+                kernel_path: std::ptr::null(),
+                cmdline: std::ptr::null(),
+                extra_args: c_extra_args.as_ptr(),
+            };
+
+            use std::ffi::CString;
+
+            if let Err(e) = safe_vm.setup_qemu_mode(&config, &qmp_socket_path) {
+                return error_to_errno(e);
+            }
+
+            let vm = Vm::new_native(id_str, safe_vm);
+            let running_vm = match vm.start().await {
+                Ok(r) => r,
+                Err(e) => return error_to_errno(e),
+            };
+
+            if !pid_out.is_null() {
+                *pid_out = running_vm.pid().unwrap_or(0);
+            }
+
+            std::mem::forget(running_vm);
+            return 0;
+        }
+
+        let parent_id = {
+            let path = std::path::Path::new(snap_str);
+            let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+            let parts: Vec<&str> = file_name.split('_').collect();
+            if parts.len() >= 2 {
+                parts[0].to_string()
+            } else {
+                "default".to_string()
+            }
+        };
+
+        let mut src_rootfs = format!("/var/lib/pane/instances/{}/rootfs.img", parent_id);
+        if !std::path::Path::new(&src_rootfs).exists() {
+            src_rootfs = format!("/tmp/rootfs-{}.img", parent_id);
+            if !std::path::Path::new(&src_rootfs).exists() {
+                src_rootfs = format!("/tmp/pane/rootfs-{}.img", parent_id);
+            }
+        }
+
+        if let Err(e) = crate::vm::cow_clone_rootfs(&src_rootfs, rootfs_str) {
+            return error_to_errno(e);
+        }
 
         let mut frozen_vm = match Vm::<Spawning>::fork_firecracker(id_str, snap_str, mem_str).await
         {

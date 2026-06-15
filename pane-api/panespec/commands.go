@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package panespec
 
 import (
@@ -11,7 +13,7 @@ import (
 // ConfigInit returns the scaffolded commented YAML configuration
 func ConfigInit() string {
 	return `# Pane VM configuration file (pane.yaml)
-# For more information, see https://github.com/g-varhan/Pane
+# For more information, see https://github.com/pane-vmm/pane
 
 # VMM backend selector (qemu | firecracker)
 vmm: qemu

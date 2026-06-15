@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package panespec
 
 import (
@@ -63,7 +65,7 @@ func PullContainerImage(ref, targetDir string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get layer reader: %w", err)
 		}
-		
+
 		// Decompress layer if gzipped
 		var reader io.Reader = rc
 		gr, err := gzip.NewReader(rc)
@@ -167,11 +169,26 @@ func PullContainerImage(ref, targetDir string) error {
 	}
 
 	// 2. Inject vsock agent (pane-agent) and custom init
-	agentSrc := "/usr/local/bin/pane-agent"
-	if _, err := os.Stat(agentSrc); os.IsNotExist(err) {
-		agentSrc = "pane-core/pane-agent"
+	agentSrc := os.Getenv("PANE_AGENT_PATH")
+	if agentSrc == "" {
+		agentSrc = "/usr/local/bin/pane-agent"
 		if _, err := os.Stat(agentSrc); os.IsNotExist(err) {
-			agentSrc = "/home/varhan/projects/pane/pane-core/pane-agent"
+			found := false
+			for _, p := range []string{
+				"pane-core/pane-agent",
+				"../pane-core/pane-agent",
+				"../../pane-core/pane-agent",
+				"/var/lib/pane/pane-agent",
+			} {
+				if _, err := os.Stat(p); err == nil {
+					agentSrc = p
+					found = true
+					break
+				}
+			}
+			if !found {
+				agentSrc = "pane-core/pane-agent"
+			}
 		}
 	}
 
@@ -183,7 +200,29 @@ func PullContainerImage(ref, targetDir string) error {
 	_ = os.Chmod(filepath.Join(usrSbin, "pane-agent"), 0755)
 
 	// Compile and inject static init
-	initSrc := "/home/varhan/projects/pane/pane-api/panespec/init_src/init.c"
+	initSrc := os.Getenv("PANE_INIT_SRC_PATH")
+	if initSrc == "" {
+		initSrc = "pane-api/panespec/init_src/init.c"
+		if _, err := os.Stat(initSrc); os.IsNotExist(err) {
+			found := false
+			for _, p := range []string{
+				"panespec/init_src/init.c",
+				"init_src/init.c",
+				"../pane-api/panespec/init_src/init.c",
+				"../../pane-api/panespec/init_src/init.c",
+				"/var/lib/pane/init.c",
+			} {
+				if _, err := os.Stat(p); err == nil {
+					initSrc = p
+					found = true
+					break
+				}
+			}
+			if !found {
+				initSrc = "pane-api/panespec/init_src/init.c"
+			}
+		}
+	}
 	initDst := filepath.Join(tempRootfsDir, "init")
 	fmt.Printf("Compiling static init from %s...\n", initSrc)
 	cmdBuild := exec.Command("gcc", "-static", "-O2", initSrc, "-o", initDst)
@@ -227,7 +266,7 @@ func PullContainerImage(ref, targetDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to calculate rootfs size: %w", err)
 	}
-	sizeMB := int64(float64(sizeBytes)/(1024*1024) * 1.5)
+	sizeMB := int64(float64(sizeBytes) / (1024 * 1024) * 1.5)
 	if sizeMB < 128 {
 		sizeMB = 128
 	}

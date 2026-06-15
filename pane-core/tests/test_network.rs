@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use pane_core::network::{
     get_vm_network_group, init_network_ebpf, register_vm_network_group, unregister_vm_network_group,
 };

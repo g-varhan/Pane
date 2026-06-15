@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
@@ -143,24 +145,6 @@ func newDaemonCommand() *cobra.Command {
 					}
 				}
 			}
-
-			// Reap zombie child processes automatically
-			go func() {
-				for {
-					var status syscall.WaitStatus
-					pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
-					if err != nil {
-						if err == syscall.ECHILD {
-							time.Sleep(1 * time.Second)
-							continue
-						}
-					}
-					if pid <= 0 {
-						time.Sleep(500 * time.Millisecond)
-						continue
-					}
-				}
-			}()
 
 			fmt.Printf("Starting Pane daemon on UNIX socket: %s\n", path)
 			srv, err := server.StartGrpcServerUnix(path)

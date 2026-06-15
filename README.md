@@ -128,14 +128,14 @@ Phase 12 ██████████  Go gRPC FFI Server Daemon    ✅ DONE (
 ### Installation Script
 You can install the dependencies, build the VMM, Core, and API layers, and deploy the `pane-api` server automatically:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pane-vmm/pane/main/install.sh | sh
 ```
 
 ### Manual Build & Test
 1. Clone the repository:
    ```bash
-   git clone https://github.com/g-varhan/Pane.git
-   cd Pane
+   git clone https://github.com/pane-vmm/pane.git
+   cd pane
    ```
 2. Build and run the core C VMM test suite:
    ```bash
@@ -147,7 +147,7 @@ curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | sh
    ```
 4. Run the Go gRPC daemon tests:
    ```bash
-   cd pane-api && /home/varhan/go/bin/go test -v ./...
+   cd pane-api && go test -v ./...
    ```
 
 ---

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package ffi
 
 /*
@@ -108,7 +110,7 @@ func Spawn(id string, spec *panespec.PaneSpec) (uint32, uint32, error) {
 
 	// extra_args: C-allocated array of CStrings
 	if len(spec.ExtraArgs) > 0 {
-		cArraySize := C.size_t(len(spec.ExtraArgs) + 1) * C.size_t(unsafe.Sizeof((*C.char)(nil)))
+		cArraySize := C.size_t(len(spec.ExtraArgs)+1) * C.size_t(unsafe.Sizeof((*C.char)(nil)))
 		cArray := C.malloc(cArraySize)
 		cfg.extra_args = (**C.char)(cArray)
 

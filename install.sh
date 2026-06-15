@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Pane Installer — https://github.com/g-varhan/Pane
+#  Pane Installer — https://github.com/pane-vmm/pane
 #
 #  Supports: Arch Linux · Debian · Ubuntu · Fedora · RHEL/Rocky/Alma ·
 #            openSUSE Leap/Tumbleweed
 #  Requires: Linux x86_64, KVM-capable host, internet access
 #
 #  Usage (one-liner):
-#    curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/pane-vmm/pane/main/install.sh | bash
 #
 #  Or locally:
 #    bash install.sh [--no-daemon] [--prefix /usr/local]
@@ -179,7 +179,7 @@ if [ -f "$SCRIPT_DIR/go.mod" ] && grep -q "^module pane" "$SCRIPT_DIR/go.mod" 2>
 else
   BUILD_DIR=$(mktemp -d)
   info "Cloning Pane repository to $BUILD_DIR ..."
-  git clone --depth 1 https://github.com/g-varhan/Pane.git "$BUILD_DIR"
+  git clone --depth 1 https://github.com/pane-vmm/pane.git "$BUILD_DIR"
   CLEANUP_BUILD=true
 fi
 ok "Source ready"
@@ -246,7 +246,7 @@ if [ "$INSTALL_DAEMON" = true ] && command -v systemctl &>/dev/null; then
   $SUDO tee /etc/systemd/system/pane.service >/dev/null <<UNIT
 [Unit]
 Description=Pane VM Lifecycle Daemon
-Documentation=https://github.com/g-varhan/Pane
+Documentation=https://github.com/pane-vmm/pane
 After=network.target
 Wants=network.target
 
@@ -302,8 +302,8 @@ echo -e "    ${CYAN}pane snapshot <id>${NC}         # Snapshot a VM"
 echo -e "    ${CYAN}pane fork <id> <new-id>${NC}   # Clone a VM"
 echo ""
 echo -e "  ${BOLD}Documentation:${NC}"
-echo -e "    https://github.com/g-varhan/Pane/blob/main/docs/README.md"
+echo -e "    https://github.com/pane-vmm/pane/blob/main/docs/README.md"
 echo ""
 echo -e "  ${BOLD}To uninstall:${NC}"
-echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/uninstall.sh | bash${NC}"
+echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/pane-vmm/pane/main/uninstall.sh | bash${NC}"
 echo ""

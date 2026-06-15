@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package server
 
 import (
@@ -7,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 
 	"pane/pane-api/ffi"
 	"pane/pane-api/panespec"
@@ -16,6 +19,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+var envMutex sync.Mutex
 
 // PaneServer implements the gRPC PaneService interface
 type PaneServer struct {
@@ -47,18 +52,21 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 		}
 	}
 
+	envMutex.Lock()
 	if spec.Env != nil {
 		for k, v := range spec.Env {
 			os.Setenv(k, v)
 		}
-		defer func() {
-			for k := range spec.Env {
-				os.Unsetenv(k)
-			}
-		}()
 	}
 
 	cid, pid, err := ffi.Spawn(req.Id, spec)
+
+	if spec.Env != nil {
+		for k := range spec.Env {
+			os.Unsetenv(k)
+		}
+	}
+	envMutex.Unlock()
 	if err != nil {
 		// Attempt to read QEMU logs to give a more informative error message
 		logPath := fmt.Sprintf("/run/pane/qemu-%s.log", req.Id)

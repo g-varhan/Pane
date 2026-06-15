@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package panespec
 
 import (
@@ -52,16 +54,16 @@ type DriversConfig struct {
 }
 
 type PaneSpec struct {
-	VMM       *VMMType       `json:"vmm,omitempty" yaml:"vmm,omitempty"`
-	CPUs      *uint32        `json:"cpus,omitempty" yaml:"cpus,omitempty"`
-	Memory    *string        `json:"memory,omitempty" yaml:"memory,omitempty"` // e.g. "512MiB", "2GiB"
-	Disk      *DiskConfig    `json:"disk,omitempty" yaml:"disk,omitempty"`
-	Image     *string        `json:"image,omitempty" yaml:"image,omitempty"`
-	Network   *NetworkConfig `json:"network,omitempty" yaml:"network,omitempty"`
-	Drivers   *DriversConfig `json:"drivers,omitempty" yaml:"drivers,omitempty"`
-	Kernel    *string        `json:"kernel,omitempty" yaml:"kernel,omitempty"`
-	Cmdline   *string        `json:"cmdline,omitempty" yaml:"cmdline,omitempty"`
-	ExtraArgs []string      `json:"extra_args,omitempty" yaml:"extra_args,omitempty"`
+	VMM       *VMMType          `json:"vmm,omitempty" yaml:"vmm,omitempty"`
+	CPUs      *uint32           `json:"cpus,omitempty" yaml:"cpus,omitempty"`
+	Memory    *string           `json:"memory,omitempty" yaml:"memory,omitempty"` // e.g. "512MiB", "2GiB"
+	Disk      *DiskConfig       `json:"disk,omitempty" yaml:"disk,omitempty"`
+	Image     *string           `json:"image,omitempty" yaml:"image,omitempty"`
+	Network   *NetworkConfig    `json:"network,omitempty" yaml:"network,omitempty"`
+	Drivers   *DriversConfig    `json:"drivers,omitempty" yaml:"drivers,omitempty"`
+	Kernel    *string           `json:"kernel,omitempty" yaml:"kernel,omitempty"`
+	Cmdline   *string           `json:"cmdline,omitempty" yaml:"cmdline,omitempty"`
+	ExtraArgs []string          `json:"extra_args,omitempty" yaml:"extra_args,omitempty"`
 	Env       map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 }
 
@@ -357,11 +359,11 @@ func MergeExtraArgs(base, override []string) []string {
 }
 
 // Helper functions to get pointers to values
-func PtrString(v string) *string { return &v }
-func PtrUint32(v uint32) *uint32 { return &v }
-func PtrBool(v bool) *bool     { return &v }
-func PtrVMMType(v VMMType) *VMMType { return &v }
-func PtrDiskFormat(v DiskFormat) *DiskFormat { return &v }
+func PtrString(v string) *string                { return &v }
+func PtrUint32(v uint32) *uint32                { return &v }
+func PtrBool(v bool) *bool                      { return &v }
+func PtrVMMType(v VMMType) *VMMType             { return &v }
+func PtrDiskFormat(v DiskFormat) *DiskFormat    { return &v }
 func PtrNetworkMode(v NetworkMode) *NetworkMode { return &v }
 
 // DefaultProfile returns a panespec matching the legacy hardcoded qemu.c behavior

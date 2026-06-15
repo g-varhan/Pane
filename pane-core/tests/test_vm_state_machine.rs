@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use pane_core::backends::MachineConfig;
 use pane_core::vm::{Dead, Frozen, Running, Spawning, Vm};
 

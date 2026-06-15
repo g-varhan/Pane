@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use pane_core::exec::{exec_in_guest, ExecChunk, ExecRequest};
 use std::path::Path;
 use std::time::Instant;

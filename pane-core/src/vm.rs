@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::backends::FirecrackerVm;
-use crate::error::Result;
+use crate::error::{PaneError, Result};
 use crate::ffi::SafeVm;
 use std::marker::PhantomData;
 
@@ -171,9 +173,15 @@ impl<State: VmState> Vm<State> {
         }
 
         // Clean up QMP socket if it exists for QEMU
-        let qmp_socket = if std::path::Path::new("/run/pane").join(format!("qmp-{}.sock", self.id)).exists() {
+        let qmp_socket = if std::path::Path::new("/run/pane")
+            .join(format!("qmp-{}.sock", self.id))
+            .exists()
+        {
             Some(std::path::Path::new("/run/pane").join(format!("qmp-{}.sock", self.id)))
-        } else if std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", self.id)).exists() {
+        } else if std::path::Path::new("/tmp/pane")
+            .join(format!("qmp-{}.sock", self.id))
+            .exists()
+        {
             Some(std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", self.id)))
         } else {
             None
@@ -183,7 +191,9 @@ impl<State: VmState> Vm<State> {
             if let Ok(mut stream) = tokio::net::UnixStream::connect(&sock_path).await {
                 let mut buf = [0u8; 1024];
                 let _ = stream.read(&mut buf).await;
-                let _ = stream.write_all(b"{\"execute\":\"qmp_capabilities\"}\n").await;
+                let _ = stream
+                    .write_all(b"{\"execute\":\"qmp_capabilities\"}\n")
+                    .await;
                 let _ = stream.read(&mut buf).await;
                 let _ = stream.write_all(b"{\"execute\":\"quit\"}\n").await;
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -200,9 +210,8 @@ impl<State: VmState> Vm<State> {
 
     /// Resolves the vsock UDS socket path for this VM.
     pub fn get_vsock_socket_path(&self) -> std::path::PathBuf {
-        let run_pane = std::path::Path::new("/run/pane");
-        if run_pane.exists() || std::fs::create_dir_all(run_pane).is_ok() {
-            run_pane.join(format!("fc-vsock-{}.sock", self.id))
+        if crate::is_run_pane_writable() {
+            std::path::Path::new("/run/pane").join(format!("fc-vsock-{}.sock", self.id))
         } else {
             let tmp_pane = std::path::Path::new("/tmp/pane");
             let _ = std::fs::create_dir_all(tmp_pane);
@@ -413,7 +422,10 @@ impl Vm<Spawning> {
     ) -> Result<Vm<Frozen>> {
         let mut vm = Self::new_firecracker(id);
         vm.spawn().await?;
-        vm.load_snapshot(snapshot_path, mem_file_path).await?;
+        if let Err(e) = vm.load_snapshot(snapshot_path, mem_file_path).await {
+            let _ = vm.destroy().await;
+            return Err(e);
+        }
         Ok(Vm {
             id: vm.id,
             backend: vm.backend,
@@ -434,18 +446,23 @@ impl Vm<Spawning> {
     /// let running_vm = vm.start().await.unwrap();
     /// # });
     /// ```
-    pub async fn start(self) -> Result<Vm<Running>> {
-        match &self.backend {
-            VmBackend::Firecracker(fc) => fc.start().await?,
-            VmBackend::Native(_) => {}
+    pub async fn start(mut self) -> Result<Vm<Running>> {
+        if let VmBackend::Firecracker(ref fc) = self.backend {
+            if let Err(e) = fc.start().await {
+                let _ = self.cleanup().await;
+                return Err(e);
+            }
         }
-        let running_vm = Vm {
+        let running_vm: Vm<Running> = Vm {
             id: self.id,
             backend: self.backend,
             vsock_cid: self.vsock_cid,
             _state: PhantomData,
         };
-        running_vm.ensure_cgroup_attached()?;
+        if let Err(e) = running_vm.ensure_cgroup_attached() {
+            let _ = running_vm.destroy().await;
+            return Err(e);
+        }
         Ok(running_vm)
     }
 
@@ -555,9 +572,44 @@ impl Vm<Running> {
 
     /// Unsafely reconstructs a Running VM instance from an ID.
     pub fn assume_running(id: &str) -> Self {
+        let backend = if is_qemu(id) {
+            let run_pane = std::path::Path::new("/run/pane");
+            let pid_path = if run_pane.join(format!("qemu-{}.pid", id)).exists() {
+                run_pane.join(format!("qemu-{}.pid", id))
+            } else {
+                std::path::Path::new("/tmp/pane").join(format!("qemu-{}.pid", id))
+            };
+
+            let pid: i32 = if let Ok(content) = std::fs::read_to_string(pid_path) {
+                content.trim().parse().unwrap_or(0)
+            } else {
+                0
+            };
+
+            let qmp_socket_path = if run_pane.join(format!("qmp-{}.sock", id)).exists() {
+                run_pane.join(format!("qmp-{}.sock", id))
+            } else {
+                std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", id))
+            };
+
+            let qmp_path_str = qmp_socket_path.to_string_lossy().into_owned();
+            let safe_vm = SafeVm::reconstruct_qemu(id, pid, &qmp_path_str).unwrap_or_else(|_| {
+                match SafeVm::create() {
+                    Ok(vm) => vm,
+                    Err(e) => panic!(
+                        "Critical error: Failed to allocate KVM VM fallback: {:?}",
+                        e
+                    ),
+                }
+            });
+            VmBackend::Native(safe_vm)
+        } else {
+            VmBackend::Firecracker(Box::new(FirecrackerVm::new(id)))
+        };
+
         Self {
             id: id.to_string(),
-            backend: VmBackend::Firecracker(Box::new(FirecrackerVm::new(id))),
+            backend,
             vsock_cid: 3,
             _state: PhantomData,
         }
@@ -660,11 +712,15 @@ impl Vm<Frozen> {
             let timeout = std::time::Duration::from_secs(15);
             while start.elapsed() < timeout {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                if let Ok(resp) = send_qmp_command_on_demand(&self.id, "{\"execute\":\"query-migrate\"}").await {
+                if let Ok(resp) =
+                    send_qmp_command_on_demand(&self.id, "{\"execute\":\"query-migrate\"}").await
+                {
                     if resp.contains("\"status\": \"completed\"") {
                         break;
                     }
-                    if resp.contains("\"status\": \"failed\"") || resp.contains("\"status\": \"cancelled\"") {
+                    if resp.contains("\"status\": \"failed\"")
+                        || resp.contains("\"status\": \"cancelled\"")
+                    {
                         return Err(crate::error::PaneError::Api {
                             status: "Migration failed".to_string(),
                             body: resp,
@@ -674,7 +730,9 @@ impl Vm<Frozen> {
             }
         } else {
             match &self.backend {
-                VmBackend::Firecracker(fc) => fc.create_snapshot(snapshot_path, mem_file_path).await?,
+                VmBackend::Firecracker(fc) => {
+                    fc.create_snapshot(snapshot_path, mem_file_path).await?
+                }
                 VmBackend::Native(_) => {
                     // Native KVM snapshotting
                 }
@@ -707,9 +765,44 @@ impl Vm<Frozen> {
 
     /// Unsafely reconstructs a Frozen VM instance from an ID.
     pub fn assume_frozen(id: &str) -> Self {
+        let backend = if is_qemu(id) {
+            let run_pane = std::path::Path::new("/run/pane");
+            let pid_path = if run_pane.join(format!("qemu-{}.pid", id)).exists() {
+                run_pane.join(format!("qemu-{}.pid", id))
+            } else {
+                std::path::Path::new("/tmp/pane").join(format!("qemu-{}.pid", id))
+            };
+
+            let pid: i32 = if let Ok(content) = std::fs::read_to_string(pid_path) {
+                content.trim().parse().unwrap_or(0)
+            } else {
+                0
+            };
+
+            let qmp_socket_path = if run_pane.join(format!("qmp-{}.sock", id)).exists() {
+                run_pane.join(format!("qmp-{}.sock", id))
+            } else {
+                std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", id))
+            };
+
+            let qmp_path_str = qmp_socket_path.to_string_lossy().into_owned();
+            let safe_vm = SafeVm::reconstruct_qemu(id, pid, &qmp_path_str).unwrap_or_else(|_| {
+                match SafeVm::create() {
+                    Ok(vm) => vm,
+                    Err(e) => panic!(
+                        "Critical error: Failed to allocate KVM VM fallback: {:?}",
+                        e
+                    ),
+                }
+            });
+            VmBackend::Native(safe_vm)
+        } else {
+            VmBackend::Firecracker(Box::new(FirecrackerVm::new(id)))
+        };
+
         Self {
             id: id.to_string(),
-            backend: VmBackend::Firecracker(Box::new(FirecrackerVm::new(id))),
+            backend,
             vsock_cid: 3,
             _state: PhantomData,
         }
@@ -717,8 +810,12 @@ impl Vm<Frozen> {
 }
 
 fn is_qemu(id: &str) -> bool {
-    std::path::Path::new("/run/pane").join(format!("qmp-{}.sock", id)).exists() ||
-    std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", id)).exists()
+    std::path::Path::new("/run/pane")
+        .join(format!("qmp-{}.sock", id))
+        .exists()
+        || std::path::Path::new("/tmp/pane")
+            .join(format!("qmp-{}.sock", id))
+            .exists()
 }
 
 async fn send_qmp_command_on_demand(id: &str, cmd: &str) -> Result<String> {
@@ -730,18 +827,66 @@ async fn send_qmp_command_on_demand(id: &str, cmd: &str) -> Result<String> {
         std::path::Path::new("/tmp/pane").join(format!("qmp-{}.sock", id))
     };
 
-    let mut stream = tokio::net::UnixStream::connect(&qmp_socket).await.map_err(|e| {
-        crate::error::PaneError::Socket(format!("QMP socket connect failed: {}", e))
-    })?;
+    let mut stream = tokio::net::UnixStream::connect(&qmp_socket)
+        .await
+        .map_err(|e| {
+            crate::error::PaneError::Socket(format!("QMP socket connect failed: {}", e))
+        })?;
 
     let mut buf = [0u8; 1024];
     let _ = stream.read(&mut buf).await;
-    let _ = stream.write_all(b"{\"execute\":\"qmp_capabilities\"}\n").await;
+    let _ = stream
+        .write_all(b"{\"execute\":\"qmp_capabilities\"}\n")
+        .await;
     let _ = stream.read(&mut buf).await;
     let _ = stream.write_all(format!("{}\n", cmd).as_bytes()).await;
-    let n = stream.read(&mut buf).await.map_err(|e| {
-        crate::error::PaneError::Socket(format!("QMP read failed: {}", e))
-    })?;
+    let n = stream
+        .read(&mut buf)
+        .await
+        .map_err(|e| crate::error::PaneError::Socket(format!("QMP read failed: {}", e)))?;
 
     Ok(String::from_utf8_lossy(&buf[..n]).into_owned())
+}
+
+/// Clones the parent VM's rootfs to a new path using Copy-on-Write (`cp --reflink=always`).
+/// On non-reflink filesystems (like ext4 or tmpfs), this fails fast with `ENOTSUP` / `EOPNOTSUPP`.
+pub fn cow_clone_rootfs(src_path: &str, dst_path: &str) -> Result<()> {
+    let src = std::path::Path::new(src_path);
+    if !src.exists() {
+        return Err(PaneError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Source rootfs not found: {}", src_path),
+        )));
+    }
+
+    if let Some(parent) = std::path::Path::new(dst_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    // Execute cp --reflink=always to do the CoW clone
+    let output = std::process::Command::new("cp")
+        .args(["--reflink=always", src_path, dst_path])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => Ok(()),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if stderr.contains("Operation not supported")
+                || stderr.contains("failed to clone")
+                || stderr.contains("Unsupported")
+            {
+                // Fast-fail: filesystem does not support reflink
+                Err(PaneError::Io(std::io::Error::from_raw_os_error(
+                    libc::ENOTSUP,
+                )))
+            } else {
+                Err(PaneError::Io(std::io::Error::other(format!(
+                    "cp --reflink=always failed: {}",
+                    stderr
+                ))))
+            }
+        }
+        Err(e) => Err(PaneError::Io(e)),
+    }
 }

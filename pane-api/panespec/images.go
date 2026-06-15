@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package panespec
 
 import (
@@ -226,7 +228,7 @@ func pullWindows(diskPath, targetDir string) error {
 		// Check local path first so we never re-download unnecessarily.
 		srcIso := os.Getenv("WINDOWS_ISO_PATH")
 		if srcIso == "" {
-			srcIso = "/home/varhan/Documents/disk/tiny10 x64 23h2.iso"
+			srcIso = "/var/lib/pane/images/tiny10/v1.0/disk.iso"
 		}
 
 		if _, err := os.Stat(srcIso); err == nil {
@@ -271,7 +273,7 @@ func resolveVirtioWin(targetDir string) string {
 	}
 
 	// 2. Default local path (legacy).
-	legacy := "/home/varhan/Documents/disk/virtio-win-0.1.271.iso"
+	legacy := "/var/lib/pane/images/virtio-win.iso"
 	if _, err := os.Stat(legacy); err == nil {
 		return legacy
 	}
@@ -356,11 +358,11 @@ func pullDistro(name string, entry distroEntry, diskPath, targetDir string) erro
 
 // progressWriter wraps an io.Writer and prints a live terminal progress bar.
 type progressWriter struct {
-	total      int64
-	written    int64
-	lastPrint  time.Time
-	barWidth   int
-	startTime  time.Time
+	total     int64
+	written   int64
+	lastPrint time.Time
+	barWidth  int
+	startTime time.Time
 }
 
 func (pw *progressWriter) Write(p []byte) (int, error) {

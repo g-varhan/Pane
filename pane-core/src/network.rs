@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::error::{PaneError, Result};
 use aya::maps::HashMap;
 use aya::programs::{SchedClassifier, TcAttachType};
@@ -9,9 +11,14 @@ use std::sync::Mutex;
 // Global eBPF instance
 static BPF: Lazy<Mutex<Option<Ebpf>>> = Lazy::new(|| Mutex::new(None));
 
+fn lock_bpf() -> Result<std::sync::MutexGuard<'static, Option<Ebpf>>> {
+    BPF.lock()
+        .map_err(|e| PaneError::Socket(format!("BPF mutex poisoned: {}", e)))
+}
+
 /// Initializes the eBPF program by loading the compiled ELF bytecode.
 pub fn init_network_ebpf() -> Result<()> {
-    let mut guard = BPF.lock().unwrap();
+    let mut guard = lock_bpf()?;
     if guard.is_some() {
         return Ok(());
     }
@@ -28,7 +35,7 @@ pub fn init_network_ebpf() -> Result<()> {
 /// Attaches the micro-segmentation TC filter to the specified host interface.
 pub fn attach_filter_to_interface(iface: &str) -> Result<()> {
     init_network_ebpf()?;
-    let mut guard = BPF.lock().unwrap();
+    let mut guard = lock_bpf()?;
     if let Some(ref mut bpf) = *guard {
         // Retrieve SchedClassifier program
         let program: &mut SchedClassifier = bpf
@@ -63,7 +70,7 @@ pub fn attach_filter_to_interface(iface: &str) -> Result<()> {
 /// Registers a VM IPv4 address with its micro-segmentation group in the BPF map.
 pub fn register_vm_network_group(ip: Ipv4Addr, group_id: u32) -> Result<()> {
     init_network_ebpf()?;
-    let mut guard = BPF.lock().unwrap();
+    let mut guard = lock_bpf()?;
     if let Some(ref mut bpf) = *guard {
         // Retrieve ip_groups map
         let mut ip_groups: HashMap<_, u32, u32> =
@@ -84,7 +91,7 @@ pub fn register_vm_network_group(ip: Ipv4Addr, group_id: u32) -> Result<()> {
 /// Unregisters a VM IPv4 address from the BPF map.
 pub fn unregister_vm_network_group(ip: Ipv4Addr) -> Result<()> {
     init_network_ebpf()?;
-    let mut guard = BPF.lock().unwrap();
+    let mut guard = lock_bpf()?;
     if let Some(ref mut bpf) = *guard {
         // Retrieve ip_groups map
         let mut ip_groups: HashMap<_, u32, u32> =
@@ -102,7 +109,7 @@ pub fn unregister_vm_network_group(ip: Ipv4Addr) -> Result<()> {
 /// Retrieves the registered micro-segmentation group ID for a VM IPv4 address.
 pub fn get_vm_network_group(ip: Ipv4Addr) -> Result<Option<u32>> {
     init_network_ebpf()?;
-    let mut guard = BPF.lock().unwrap();
+    let mut guard = lock_bpf()?;
     if let Some(ref mut bpf) = *guard {
         let ip_groups: HashMap<_, u32, u32> =
             HashMap::try_from(bpf.map_mut("ip_groups").ok_or_else(|| {

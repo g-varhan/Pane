@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use pane_core::resources::{get_cgroup_base_path, CpuMaxLimit, ResourceControls};
 use pane_core::vm::Vm;
 use std::fs;

@@ -88,7 +88,7 @@ If you're building AI sandboxes, CI runners, security research tooling, or edge 
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pane-vmm/pane/main/install.sh | bash
 ```
 
 ### Options
@@ -107,7 +107,7 @@ curl -fsSL .../install.sh | bash -s -- --no-daemon
 ### Manual build
 
 ```bash
-git clone https://github.com/g-varhan/Pane.git
+git clone https://github.com/pane-vmm/pane.git
 cd Pane
 bash install.sh
 ```
@@ -140,7 +140,7 @@ bash install.sh
 
 ```bash
 # Preserve images and snapshots (default)
-curl -fsSL https://raw.githubusercontent.com/g-varhan/Pane/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pane-vmm/pane/main/uninstall.sh | bash
 
 # Remove everything including VM images and snapshots
 curl -fsSL .../uninstall.sh | bash -s -- --purge
@@ -968,4 +968,4 @@ These are CI gates — regressions block merges.
 
 ---
 
-*Pane · Built on Linux KVM · Apache-2.0 License · https://github.com/g-varhan/Pane*
+*Pane · Built on Linux KVM · Apache-2.0 License · https://github.com/pane-vmm/pane*

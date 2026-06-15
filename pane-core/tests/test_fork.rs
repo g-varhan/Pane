@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use pane_core::vm::Vm;
 use std::time::Instant;
 use tokio::process::Command;
@@ -52,4 +54,24 @@ async fn test_fork_50_vms() {
 
     let _ = std::fs::remove_file(snapshot_path);
     let _ = std::fs::remove_file(mem_file_path);
+}
+
+#[test]
+fn test_cow_clone_fast_fail() {
+    let src = "/tmp/test_cow_clone_src";
+    let dst = "/tmp/test_cow_clone_dst";
+
+    let _ = std::fs::write(src, b"source data");
+    let _ = std::fs::remove_file(dst);
+
+    let res = pane_core::vm::cow_clone_rootfs(src, dst);
+    assert!(res.is_err());
+    if let Err(pane_core::error::PaneError::Io(e)) = res {
+        assert_eq!(e.raw_os_error(), Some(libc::ENOTSUP));
+    } else {
+        panic!("Expected PaneError::Io(ENOTSUP)");
+    }
+
+    let _ = std::fs::remove_file(src);
+    let _ = std::fs::remove_file(dst);
 }

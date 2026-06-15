@@ -76,7 +76,7 @@ Pane automatically creates a dedicated cgroup directory for every VM. You can dy
 - **CPU Quotas**: Limit CPU shares to ensure fair scheduling across co-located tenants.
 
 ### Network Micro-segmentation with eBPF (`aya`)
-Instead of clogging host routing tables with thousands of complex `iptables` or `nftables` rules, Pane compiles a custom eBPF packet classifier ([pane_filter.bpf.c](file:///home/varhan/projects/pane/pane-core/src/bpf/pane_filter.bpf.c)) and attaches it directly to the host TAP device ingress using **Traffic Control (TC)**.
+Instead of clogging host routing tables with thousands of complex `iptables` or `nftables` rules, Pane compiles a custom eBPF packet classifier ([pane_filter.bpf.c](../pane-core/src/bpf/pane_filter.bpf.c)) and attaches it directly to the host TAP device ingress using **Traffic Control (TC)**.
 - VMs are assigned to group IDs.
 - eBPF inspects IPv4 packet headers on the host interface.
 - Communication between VMs of different groups is dropped at the lowest kernel layer with **zero overhead**.
@@ -95,7 +95,7 @@ Pane's default `Spawning` state leverages Firecracker for speed, but the C-layer
 Under the hood, the QEMU backend instantiates a standard PCI bus layout with virtual drivers suitable for full hardware emulation.
 
 ### The QEMU Invocation
-When you transition a VM to QEMU mode in `pane-vmm` via [pane_vm_setup_qemu_mode](file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c#L58-L110), it spawns:
+When you transition a VM to QEMU mode in `pane-vmm` via [pane_vm_setup_qemu_mode](../pane-vmm/src/backends/qemu.c#L58-L110), it spawns:
 ```bash
 qemu-system-x86_64 -enable-kvm -m 128 -smp 1 -display none -nographic -drive file=<image_path>,format=raw,if=virtio -qmp unix:<qmp_socket_path>,server,nowait -serial none
 ```
@@ -110,7 +110,7 @@ Because installing Windows or running a full desktop ISO requires more resources
 2. **Download the ISO**: Place your Windows ISO (e.g. `Win10_Installer.iso`) or Custom Linux ISO (e.g. `ubuntu.iso`) in a accessible directory.
 
 ### Step 2: Customizing the QEMU Backend in Pane
-To run heavy OS installs, open [pane-vmm/src/backends/qemu.c](file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c#L83-L103) and customize the boot parameters to support larger memory limits, attach the ISO, and enable VNC display access:
+To run heavy OS installs, open [pane-vmm/src/backends/qemu.c](../pane-vmm/src/backends/qemu.c#L83-L103) and customize the boot parameters to support larger memory limits, attach the ISO, and enable VNC display access:
 
 ```diff
          char *args[] = {
@@ -144,4 +144,4 @@ if err != nil {
 }
 ```
 
-Once installation is finished, you can remove the `-cdrom` installer flag from [qemu.c](file:///home/varhan/projects/pane/pane-vmm/src/backends/qemu.c) and boot directly from your newly populated `windows_install.qcow2` drive.
+Once installation is finished, you can remove the `-cdrom` installer flag from [qemu.c](../pane-vmm/src/backends/qemu.c) and boot directly from your newly populated `windows_install.qcow2` drive.

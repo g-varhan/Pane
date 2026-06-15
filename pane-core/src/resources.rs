@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::error::{PaneError, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,21 +31,37 @@ pub struct ResourceControls {
 }
 
 /// Helper to discover the writeable base cgroup directory for Pane.
+fn check_cgroup_writable(path: &Path) -> bool {
+    if path.exists() {
+        let test_dir = path.join(".tmp_dir_test");
+        if fs::create_dir(&test_dir).is_ok() {
+            let _ = fs::remove_dir(&test_dir);
+            true
+        } else {
+            false
+        }
+    } else {
+        fs::create_dir_all(path).is_ok()
+    }
+}
+
+/// Helper to discover the writeable base cgroup directory for Pane.
 pub fn get_cgroup_base_path() -> Result<PathBuf> {
     // 1. Try standard root/system-wide path /sys/fs/cgroup/pane
     let root_path = PathBuf::from("/sys/fs/cgroup/pane");
-    if root_path.exists() || fs::create_dir_all(&root_path).is_ok() {
+    if check_cgroup_writable(&root_path) {
         return Ok(root_path);
     }
 
     // 2. Try user-specific systemd cgroup path for non-root execution
+    // SAFETY: getuid is a simple libc system call that always succeeds and does not access arbitrary memory.
     let uid = unsafe { libc::getuid() };
     if uid != 0 {
         let user_path = PathBuf::from(format!(
             "/sys/fs/cgroup/user.slice/user-{}.slice/user@{}.service/pane",
             uid, uid
         ));
-        if user_path.exists() || fs::create_dir_all(&user_path).is_ok() {
+        if check_cgroup_writable(&user_path) {
             // Attempt to enable controllers in the parent user service path
             if let Some(parent) = user_path.parent() {
                 let subtree_file = parent.join("cgroup.subtree_control");
@@ -66,16 +84,11 @@ pub fn get_cgroup_base_path() -> Result<PathBuf> {
                 let rel_path = parts[2].trim_start_matches('/');
                 let mut path = PathBuf::from("/sys/fs/cgroup").join(rel_path);
                 while path.as_os_str() != "/sys/fs/cgroup" && path.as_os_str() != "/" {
-                    if fs::metadata(&path)
-                        .map(|m| !m.permissions().readonly())
-                        .unwrap_or(false)
-                    {
-                        let pane_path = path.join("pane");
-                        if pane_path.exists() || fs::create_dir_all(&pane_path).is_ok() {
-                            let subtree_file = pane_path.join("cgroup.subtree_control");
-                            let _ = fs::write(&subtree_file, "+cpu +memory +pids");
-                            return Ok(pane_path);
-                        }
+                    let pane_path = path.join("pane");
+                    if check_cgroup_writable(&pane_path) {
+                        let subtree_file = pane_path.join("cgroup.subtree_control");
+                        let _ = fs::write(&subtree_file, "+cpu +memory +pids");
+                        return Ok(pane_path);
                     }
                     if let Some(parent) = path.parent() {
                         path = parent.to_path_buf();
@@ -143,21 +156,58 @@ impl CgroupManager {
     pub fn apply(&self, limits: &ResourceControls) -> Result<()> {
         // 1. Memory limits
         if let Some(mem_max) = limits.memory_max {
-            fs::write(self.path.join("memory.max"), mem_max.to_string())?;
+            fs::write(self.path.join("memory.max"), mem_max.to_string()).map_err(|e| {
+                PaneError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to write memory.max under {}: {}",
+                        self.path.display(),
+                        e
+                    ),
+                ))
+            })?;
         }
         if let Some(mem_high) = limits.memory_high {
-            fs::write(self.path.join("memory.high"), mem_high.to_string())?;
+            fs::write(self.path.join("memory.high"), mem_high.to_string()).map_err(|e| {
+                PaneError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to write memory.high under {}: {}",
+                        self.path.display(),
+                        e
+                    ),
+                ))
+            })?;
         }
 
         // 2. CPU scheduling limits
         if let Some(weight) = limits.cpu_weight {
-            fs::write(self.path.join("cpu.weight"), weight.to_string())?;
+            fs::write(self.path.join("cpu.weight"), weight.to_string()).map_err(|e| {
+                PaneError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to write cpu.weight under {}: {}",
+                        self.path.display(),
+                        e
+                    ),
+                ))
+            })?;
         }
         if let Some(cpu_max) = limits.cpu_max {
             fs::write(
                 self.path.join("cpu.max"),
                 format!("{} {}", cpu_max.quota_us, cpu_max.period_us),
-            )?;
+            )
+            .map_err(|e| {
+                PaneError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to write cpu.max under {}: {}",
+                        self.path.display(),
+                        e
+                    ),
+                ))
+            })?;
         }
 
         // 3. PIDs limits
@@ -167,7 +217,16 @@ impl CgroupManager {
             } else {
                 pids_limit.to_string()
             };
-            fs::write(self.path.join("pids.max"), val)?;
+            fs::write(self.path.join("pids.max"), val).map_err(|e| {
+                PaneError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to write pids.max under {}: {}",
+                        self.path.display(),
+                        e
+                    ),
+                ))
+            })?;
         }
 
         Ok(())

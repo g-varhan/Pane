@@ -24,12 +24,12 @@
 
 ## Code Map
 
-- [pane_vmm.h](file:///home/varhan/projects/pane/pane-vmm/include/pane_vmm.h): The public API definition.
-- [kvm.c](file:///home/varhan/projects/pane/pane-vmm/src/kvm.c): KVM initialization, memory mapping, vCPU setup, watchdog timer, and the vCPU run loop.
-- [virtio.c](file:///home/varhan/projects/pane/pane-vmm/src/virtio.c): Virtio-MMIO register mapping and emulated serial console.
-- [test_create_destroy.c](file:///home/varhan/projects/pane/pane-vmm/src/test_create_destroy.c): Verifies memory and FD sanity after spawning and destroying 1,000 VMs.
-- [test_memory.c](file:///home/varhan/projects/pane/pane-vmm/src/test_memory.c): Validates alignment constraints and slot bounds.
-- [test_boot_serial.c](file:///home/varhan/projects/pane/pane-vmm/src/test_boot_serial.c): Real-mode and protected-mode VM boot emulator.
+- [pane_vmm.h](include/pane_vmm.h): The public API definition.
+- [kvm.c](src/kvm.c): KVM initialization, memory mapping, vCPU setup, watchdog timer, and the vCPU run loop.
+- [virtio.c](src/virtio.c): Virtio-MMIO register mapping and emulated serial console.
+- [test_create_destroy.c](src/test_create_destroy.c): Verifies memory and FD sanity after spawning and destroying 1,000 VMs.
+- [test_memory.c](src/test_memory.c): Validates alignment constraints and slot bounds.
+- [test_boot_serial.c](src/test_boot_serial.c): Real-mode and protected-mode VM boot emulator.
 
 ---
 

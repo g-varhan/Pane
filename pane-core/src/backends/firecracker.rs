@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::error::{PaneError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -88,9 +90,8 @@ impl FirecrackerVm {
 
     /// Helper to resolve the socket path, falling back to /tmp/pane if /run/pane is not writable.
     fn get_socket_path(vm_id: &str) -> PathBuf {
-        let run_pane = Path::new("/run/pane");
-        if run_pane.exists() || std::fs::create_dir_all(run_pane).is_ok() {
-            run_pane.join(format!("fc-{}.sock", vm_id))
+        if crate::is_run_pane_writable() {
+            Path::new("/run/pane").join(format!("fc-{}.sock", vm_id))
         } else {
             let tmp_pane = Path::new("/tmp/pane");
             let _ = std::fs::create_dir_all(tmp_pane);
@@ -123,7 +124,10 @@ impl FirecrackerVm {
 
         let mut cmd = tokio::process::Command::new("firecracker");
         cmd.arg("--api-sock").arg(&self.socket_path);
-        cmd.stdout(log_file.try_clone().unwrap());
+        let log_file_clone = log_file
+            .try_clone()
+            .map_err(|e| PaneError::Spawn(format!("Failed to clone log file handle: {}", e)))?;
+        cmd.stdout(log_file_clone);
         cmd.stderr(log_file);
 
         let child = cmd.spawn().map_err(|e| {
@@ -197,13 +201,61 @@ impl FirecrackerVm {
         stream.flush().await?;
 
         let mut response_bytes = Vec::new();
-        stream.read_to_end(&mut response_bytes).await?;
+        let mut buf = [0u8; 1024];
+        let mut headers_end = None;
 
-        let response_str = String::from_utf8_lossy(&response_bytes).into_owned();
+        loop {
+            let n = stream.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            response_bytes.extend_from_slice(&buf[..n]);
 
-        let mut parts = response_str.splitn(2, "\r\n\r\n");
-        let headers_part = parts.next().unwrap_or("");
-        let body_part = parts.next().unwrap_or("").to_string();
+            if let Some(pos) = response_bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                headers_end = Some(pos);
+                break;
+            }
+        }
+
+        let headers_pos = match headers_end {
+            Some(pos) => pos,
+            None => {
+                return Err(PaneError::Socket(
+                    "Malformed HTTP response: no header end".to_string(),
+                ));
+            }
+        };
+
+        let headers_part = String::from_utf8_lossy(&response_bytes[..headers_pos]).into_owned();
+        let body_start = headers_pos + 4;
+
+        let mut content_length = 0;
+        for line in headers_part.lines() {
+            if line.to_lowercase().starts_with("content-length:") {
+                if let Some(val_str) = line.split(':').nth(1) {
+                    content_length = val_str.trim().parse().unwrap_or(0);
+                }
+            }
+        }
+
+        let status_line = headers_part.lines().next().unwrap_or("");
+        let is_204 = status_line.contains(" 204");
+
+        let mut body_bytes = response_bytes[body_start..].to_vec();
+        if !is_204 && content_length > body_bytes.len() {
+            let mut remaining = content_length - body_bytes.len();
+            let mut read_buf = vec![0u8; remaining];
+            while remaining > 0 {
+                let n = stream.read(&mut read_buf[..remaining]).await?;
+                if n == 0 {
+                    break;
+                }
+                body_bytes.extend_from_slice(&read_buf[..n]);
+                remaining -= n;
+            }
+        }
+
+        let body_part = String::from_utf8_lossy(&body_bytes).into_owned();
 
         let mut lines = headers_part.lines();
         let status_line = lines.next().ok_or_else(|| {
@@ -347,6 +399,7 @@ impl FirecrackerVm {
     pub async fn kill(&mut self) -> Result<()> {
         if let Some(ref mut child) = self.child {
             let _ = child.kill().await;
+            let _ = child.wait().await;
             self.child = None;
         }
         if self.socket_path.exists() {
