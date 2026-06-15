@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <linux/kvm.h>
 
 // Maximum number of memory slots supported
