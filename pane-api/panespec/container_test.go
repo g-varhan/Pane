@@ -7,6 +7,40 @@ import (
 	"testing"
 )
 
+func TestSecureJoin(t *testing.T) {
+	base := "/tmp/pane-rootfs-123"
+
+	tests := []struct {
+		target      string
+		expectError bool
+		expected    string
+	}{
+		{"etc/passwd", false, "/tmp/pane-rootfs-123/etc/passwd"},
+		{"../../../etc/passwd", true, ""},
+		{"../pane-rootfs-123/etc", false, "/tmp/pane-rootfs-123/etc"},
+		{".", false, "/tmp/pane-rootfs-123"},
+		{"/", false, "/tmp/pane-rootfs-123"},
+		{"/etc/passwd", false, "/tmp/pane-rootfs-123/etc/passwd"},
+		{"nested/../../../etc/passwd", true, ""},
+	}
+
+	for _, tc := range tests {
+		res, err := secureJoin(base, tc.target)
+		if tc.expectError {
+			if err == nil {
+				t.Errorf("secureJoin(%q, %q) expected error, got nil (res: %q)", base, tc.target, res)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("secureJoin(%q, %q) unexpected error: %v", base, tc.target, err)
+			}
+			if res != tc.expected {
+				t.Errorf("secureJoin(%q, %q) expected %q, got %q", base, tc.target, tc.expected, res)
+			}
+		}
+	}
+}
+
 func TestPullContainerImage(t *testing.T) {
 	// Skip test if not running on Linux or if mke2fs is not available
 	if _, err := os.Stat("/usr/bin/mke2fs"); os.IsNotExist(err) {
