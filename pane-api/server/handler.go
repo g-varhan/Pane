@@ -47,17 +47,6 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 		}
 	}
 
-	if spec.Env != nil {
-		for k, v := range spec.Env {
-			os.Setenv(k, v)
-		}
-		defer func() {
-			for k := range spec.Env {
-				os.Unsetenv(k)
-			}
-		}()
-	}
-
 	cid, pid, err := ffi.Spawn(req.Id, spec)
 	if err != nil {
 		// Attempt to read QEMU logs to give a more informative error message
