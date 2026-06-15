@@ -1,0 +1,32 @@
+# Specify the Docker image to use for the runner
+image: node:latest
+
+# Define the order of your stages
+stages:
+  - build
+  - test
+  - deploy
+
+# 1. The Build Job
+build-app:
+  stage: build
+  script:
+    - echo "Installing dependencies and building the app..."
+    - npm install
+    - npm run build
+
+# 2. The Test Job
+test-app:
+  stage: test
+  script:
+    - echo "Running unit tests..."
+    - npm test
+
+# 3. The Deploy Job
+deploy-app:
+  stage: deploy
+  script:
+    - echo "Deploying the application to production..."
+    - echo "Deployment complete!"
+  only:
+    - main
