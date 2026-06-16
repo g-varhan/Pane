@@ -9,6 +9,51 @@ import (
 	"testing"
 )
 
+func TestSecureJoin(t *testing.T) {
+	base := "/var/lib/pane/rootfs"
+
+	tests := []struct {
+		name      string
+		untrusted string
+		expected  string
+	}{
+		{
+			name:      "Normal path",
+			untrusted: "etc/passwd",
+			expected:  "/var/lib/pane/rootfs/etc/passwd",
+		},
+		{
+			name:      "Path with absolute prefix",
+			untrusted: "/etc/passwd",
+			expected:  "/var/lib/pane/rootfs/etc/passwd",
+		},
+		{
+			name:      "Path traversal attempt",
+			untrusted: "../../../etc/passwd",
+			expected:  "/var/lib/pane/rootfs/etc/passwd",
+		},
+		{
+			name:      "Path traversal attempt with absolute root",
+			untrusted: "/../../../etc/passwd",
+			expected:  "/var/lib/pane/rootfs/etc/passwd",
+		},
+		{
+			name:      "Complex path traversal",
+			untrusted: "a/b/../../../../../etc/passwd",
+			expected:  "/var/lib/pane/rootfs/etc/passwd",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := secureJoin(base, tt.untrusted)
+			if result != tt.expected {
+				t.Errorf("secureJoin(%q, %q) = %q, want %q", base, tt.untrusted, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestPullContainerImage(t *testing.T) {
 	// Skip test if not running on Linux or if mke2fs is not available
 	if _, err := os.Stat("/usr/bin/mke2fs"); os.IsNotExist(err) {
