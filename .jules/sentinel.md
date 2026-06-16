@@ -1,0 +1,4 @@
+## 2024-06-16 - Prevent Tar Path Traversal in Container Extraction
+**Vulnerability:** The PullContainerImage function used `filepath.Join(tempRootfsDir, filepath.Clean(header.Name))` when unpacking tarballs. Because `filepath.Clean` is evaluated first, it cleans `../../foo` to `../../foo`. Then `filepath.Join` appends this to the base directory, allowing a malicious archive to write outside the rootfs.
+**Learning:** `filepath.Join(base, filepath.Clean(untrusted))` is not a safe way to sandbox paths in Go. The `filepath.Clean` function does not know about the base directory, so it won't strip leading `../` sequences if the path is relative.
+**Prevention:** Always use a secure sandboxing approach like `filepath.Join(base, filepath.Clean("/"+untrusted))`. By prepending a `/`, we force `filepath.Clean` to evaluate the path as an absolute path, which strips all leading `../` components, keeping the resolved path safely within the base directory.
