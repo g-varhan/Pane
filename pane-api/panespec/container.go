@@ -18,6 +18,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// secureJoin safely sandboxes an untrusted path against a base directory to prevent path traversal
+// by evaluating the untrusted input as an absolute path first.
+func secureJoin(base, untrusted string) string {
+	return filepath.Join(base, filepath.Clean("/"+untrusted))
+}
+
 // PullContainerImage pulls a Docker/OCI image, flattens layers, injects init + agent,
 // formats it to an ext4 raw disk image, and downloads the Firecracker guest kernel.
 func PullContainerImage(ref, targetDir string) error {
@@ -87,8 +93,8 @@ func PullContainerImage(ref, targetDir string) error {
 				return fmt.Errorf("failed to read tar header: %w", err)
 			}
 
-			// Resolve target path
-			target := filepath.Join(tempRootfsDir, filepath.Clean(header.Name))
+			// Resolve target path securely to prevent path traversal
+			target := secureJoin(tempRootfsDir, header.Name)
 
 			// Handle whiteouts (.wh.*)
 			base := filepath.Base(header.Name)
@@ -96,7 +102,7 @@ func PullContainerImage(ref, targetDir string) error {
 			if strings.HasPrefix(base, ".wh.") {
 				if base == ".wh..wh..opq" {
 					// Opaque whiteout: delete all contents of the directory
-					targetDirToDelete := filepath.Join(tempRootfsDir, filepath.Clean(dir))
+					targetDirToDelete := secureJoin(tempRootfsDir, dir)
 					entries, err := os.ReadDir(targetDirToDelete)
 					if err == nil {
 						for _, entry := range entries {
@@ -106,7 +112,7 @@ func PullContainerImage(ref, targetDir string) error {
 				} else {
 					// Single file whiteout: delete the target file
 					fileToDelete := strings.TrimPrefix(base, ".wh.")
-					_ = os.RemoveAll(filepath.Join(tempRootfsDir, filepath.Clean(dir), fileToDelete))
+					_ = os.RemoveAll(secureJoin(tempRootfsDir, filepath.Join(dir, fileToDelete)))
 				}
 				continue
 			}
@@ -152,7 +158,7 @@ func PullContainerImage(ref, targetDir string) error {
 			case tar.TypeLink:
 				_ = os.MkdirAll(filepath.Dir(target), 0755)
 				_ = os.Remove(target)
-				oldPath := filepath.Join(tempRootfsDir, filepath.Clean(header.Linkname))
+				oldPath := secureJoin(tempRootfsDir, header.Linkname)
 				if err := os.Link(oldPath, target); err != nil {
 					rc.Close()
 					if gr != nil {
