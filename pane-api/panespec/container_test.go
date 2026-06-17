@@ -67,3 +67,42 @@ func TestPullContainerImage(t *testing.T) {
 		t.Errorf("expected spec disk path %s, got %s", diskPath, *spec.Disk.Path)
 	}
 }
+
+func TestSecureJoin(t *testing.T) {
+	base := "/tmp/rootfs"
+	tests := []struct {
+		name      string
+		untrusted string
+		expected  string
+	}{
+		{
+			name:      "Normal path",
+			untrusted: "etc/passwd",
+			expected:  filepath.Join(base, "etc/passwd"),
+		},
+		{
+			name:      "Path traversal attempt",
+			untrusted: "../../../etc/passwd",
+			expected:  filepath.Join(base, "etc/passwd"),
+		},
+		{
+			name:      "Absolute path attempt",
+			untrusted: "/etc/passwd",
+			expected:  filepath.Join(base, "etc/passwd"),
+		},
+		{
+			name:      "Mixed path traversal",
+			untrusted: "foo/../../etc/passwd",
+			expected:  filepath.Join(base, "etc/passwd"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := secureJoin(base, tc.untrusted)
+			if result != tc.expected {
+				t.Errorf("secureJoin(%q, %q) = %q; expected %q", base, tc.untrusted, result, tc.expected)
+			}
+		})
+	}
+}

@@ -1,0 +1,4 @@
+## 2024-06-17 - [Path Traversal in Archive Extraction]
+**Vulnerability:** Zip Slip / Path Traversal vulnerability when extracting tar archives in `pane-api/panespec/container.go`. Using `filepath.Join(base, filepath.Clean(untrusted))` allows relative paths (like `../../etc/passwd`) to escape the base directory if they have more parent directory navigations than the base path has depth.
+**Learning:** `filepath.Clean` merely normalizes the path string. When joined with a base path, it doesn't restrict it to that base. To securely confine an untrusted path, it must be evaluated as an absolute path relative to root (`/`) *before* being joined to the base directory.
+**Prevention:** Implement and use a `secureJoin(base, untrusted)` function which forces the untrusted path into an absolute context: `filepath.Join(base, filepath.Clean("/" + untrusted))`.
