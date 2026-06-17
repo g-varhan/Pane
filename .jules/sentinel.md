@@ -1,0 +1,4 @@
+## 2024-05-18 - Path Traversal Vulnerability in Container Image Extraction
+**Vulnerability:** A ZipSlip / Path Traversal vulnerability exists in `pane-api/panespec/container.go` within `PullContainerImage`. The code uses `filepath.Join(tempRootfsDir, filepath.Clean(header.Name))` to construct paths when extracting tar archives. `filepath.Clean` removes `../` components, but if there are more `../` components than the current depth, they are preserved, leading to extraction outside the temporary directory and arbitrary file write.
+**Learning:** `filepath.Clean(untrusted)` is not sufficient for sanitizing archive paths because it does not know the base directory context.
+**Prevention:** Always use a `secureJoin` pattern like `filepath.Join(base, filepath.Clean("/"+untrusted))` to evaluate the untrusted path as absolute before joining it to the base directory, ensuring it cannot escape the base directory.

@@ -9,6 +9,29 @@ import (
 	"testing"
 )
 
+func TestSecureJoin(t *testing.T) {
+	base := "/tmp/base"
+
+	tests := []struct {
+		untrusted string
+		expected  string
+	}{
+		{"../../etc/passwd", "/tmp/base/etc/passwd"},
+		{"normal/file", "/tmp/base/normal/file"},
+		{"/absolute/path", "/tmp/base/absolute/path"},
+		{"foo/../../../etc/shadow", "/tmp/base/etc/shadow"},
+		{".", "/tmp/base"},
+		{"./foo", "/tmp/base/foo"},
+	}
+
+	for _, tc := range tests {
+		actual := secureJoin(base, tc.untrusted)
+		if actual != tc.expected {
+			t.Errorf("secureJoin(%q, %q) = %q; expected %q", base, tc.untrusted, actual, tc.expected)
+		}
+	}
+}
+
 func TestPullContainerImage(t *testing.T) {
 	// Skip test if not running on Linux or if mke2fs is not available
 	if _, err := os.Stat("/usr/bin/mke2fs"); os.IsNotExist(err) {
