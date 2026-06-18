@@ -88,25 +88,25 @@ func PullContainerImage(ref, targetDir string) error {
 			}
 
 			// Resolve target path
-			target := filepath.Join(tempRootfsDir, filepath.Clean(header.Name))
+			target := secureJoin(tempRootfsDir, header.Name)
 
 			// Handle whiteouts (.wh.*)
-			base := filepath.Base(header.Name)
+			baseName := filepath.Base(header.Name)
 			dir := filepath.Dir(header.Name)
-			if strings.HasPrefix(base, ".wh.") {
-				if base == ".wh..wh..opq" {
+			if strings.HasPrefix(baseName, ".wh.") {
+				if baseName == ".wh..wh..opq" {
 					// Opaque whiteout: delete all contents of the directory
-					targetDirToDelete := filepath.Join(tempRootfsDir, filepath.Clean(dir))
+					targetDirToDelete := secureJoin(tempRootfsDir, dir)
 					entries, err := os.ReadDir(targetDirToDelete)
 					if err == nil {
 						for _, entry := range entries {
-							_ = os.RemoveAll(filepath.Join(targetDirToDelete, entry.Name()))
+							_ = os.RemoveAll(secureJoin(targetDirToDelete, entry.Name()))
 						}
 					}
 				} else {
 					// Single file whiteout: delete the target file
-					fileToDelete := strings.TrimPrefix(base, ".wh.")
-					_ = os.RemoveAll(filepath.Join(tempRootfsDir, filepath.Clean(dir), fileToDelete))
+					fileToDelete := strings.TrimPrefix(baseName, ".wh.")
+					_ = os.RemoveAll(secureJoin(secureJoin(tempRootfsDir, dir), fileToDelete))
 				}
 				continue
 			}
@@ -152,7 +152,7 @@ func PullContainerImage(ref, targetDir string) error {
 			case tar.TypeLink:
 				_ = os.MkdirAll(filepath.Dir(target), 0755)
 				_ = os.Remove(target)
-				oldPath := filepath.Join(tempRootfsDir, filepath.Clean(header.Linkname))
+				oldPath := secureJoin(tempRootfsDir, header.Linkname)
 				if err := os.Link(oldPath, target); err != nil {
 					rc.Close()
 					if gr != nil {
@@ -344,6 +344,12 @@ func dirSize(path string) (int64, error) {
 		return nil
 	})
 	return size, err
+}
+
+// secureJoin safely joins an untrusted path to a base directory,
+// mitigating path traversal vulnerabilities.
+func secureJoin(base, untrusted string) string {
+	return filepath.Join(base, filepath.Clean("/"+untrusted))
 }
 
 func checkFilesystem(path string) error {
