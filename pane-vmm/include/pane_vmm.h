@@ -4,6 +4,7 @@
 #define PANE_VMM_H
 
 #include <linux/kvm.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
