@@ -1,0 +1,4 @@
+## 2025-02-28 - [CRITICAL] Go Path Traversal (Zip Slip) during Tar Extraction
+**Vulnerability:** Tar and zip extraction in Go is vulnerable to Path Traversal if standard `filepath.Join(base, filepath.Clean(header.Name))` is used, since `filepath.Clean` allows ascending `../` sequences that escape the base directory.
+**Learning:** `filepath.Clean` preserves `../` tokens at the beginning of the path if they extend past the path's implicit root when the path is relative. Thus, relative inputs like `../../etc/passwd` can escape the base directory limits.
+**Prevention:** Always prepend a `/` to untrusted inputs before cleaning to force `filepath.Clean` to treat it as an absolute path, preventing root escape: `filepath.Join(base, filepath.Clean("/" + untrusted))` ensures all extractions are strictly contained within `base`.
