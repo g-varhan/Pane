@@ -4,6 +4,7 @@ package panespec
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -65,5 +66,29 @@ func TestPullContainerImage(t *testing.T) {
 	}
 	if *spec.Disk.Path != diskPath {
 		t.Errorf("expected spec disk path %s, got %s", diskPath, *spec.Disk.Path)
+	}
+}
+
+func TestSecureJoin(t *testing.T) {
+	base := "/tmp/rootfs"
+
+	tests := []struct {
+		untrusted string
+		expected  string
+	}{
+		{"etc/passwd", "/tmp/rootfs/etc/passwd"},
+		{"/etc/passwd", "/tmp/rootfs/etc/passwd"},
+		{"../../etc/passwd", "/tmp/rootfs/etc/passwd"},
+		{"a/b/../../../etc/passwd", "/tmp/rootfs/etc/passwd"},
+		{"./etc/passwd", "/tmp/rootfs/etc/passwd"},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("input:%s", tc.untrusted), func(t *testing.T) {
+			result := secureJoin(base, tc.untrusted)
+			if result != tc.expected {
+				t.Errorf("secureJoin(%q, %q) = %q; expected %q", base, tc.untrusted, result, tc.expected)
+			}
+		})
 	}
 }
