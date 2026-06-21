@@ -88,7 +88,8 @@ func PullContainerImage(ref, targetDir string) error {
 			}
 
 			// Resolve target path
-			target := filepath.Join(tempRootfsDir, filepath.Clean(header.Name))
+			// Fixed path traversal vulnerability by using secureJoin to prevent breakout from tempRootfsDir
+			target := secureJoin(tempRootfsDir, header.Name)
 
 			// Handle whiteouts (.wh.*)
 			base := filepath.Base(header.Name)
@@ -96,7 +97,8 @@ func PullContainerImage(ref, targetDir string) error {
 			if strings.HasPrefix(base, ".wh.") {
 				if base == ".wh..wh..opq" {
 					// Opaque whiteout: delete all contents of the directory
-					targetDirToDelete := filepath.Join(tempRootfsDir, filepath.Clean(dir))
+					// Fixed path traversal vulnerability by using secureJoin to prevent breakout from tempRootfsDir
+					targetDirToDelete := secureJoin(tempRootfsDir, dir)
 					entries, err := os.ReadDir(targetDirToDelete)
 					if err == nil {
 						for _, entry := range entries {
@@ -106,7 +108,8 @@ func PullContainerImage(ref, targetDir string) error {
 				} else {
 					// Single file whiteout: delete the target file
 					fileToDelete := strings.TrimPrefix(base, ".wh.")
-					_ = os.RemoveAll(filepath.Join(tempRootfsDir, filepath.Clean(dir), fileToDelete))
+					// Fixed path traversal vulnerability by using secureJoin to prevent breakout from tempRootfsDir
+					_ = os.RemoveAll(filepath.Join(secureJoin(tempRootfsDir, dir), fileToDelete))
 				}
 				continue
 			}
@@ -152,7 +155,8 @@ func PullContainerImage(ref, targetDir string) error {
 			case tar.TypeLink:
 				_ = os.MkdirAll(filepath.Dir(target), 0755)
 				_ = os.Remove(target)
-				oldPath := filepath.Join(tempRootfsDir, filepath.Clean(header.Linkname))
+				// Fixed path traversal vulnerability by using secureJoin to prevent breakout from tempRootfsDir
+				oldPath := secureJoin(tempRootfsDir, header.Linkname)
 				if err := os.Link(oldPath, target); err != nil {
 					rc.Close()
 					if gr != nil {
