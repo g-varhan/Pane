@@ -53,8 +53,15 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 	}
 
 	envMutex.Lock()
+	originalEnv := make(map[string]*string)
 	if spec.Env != nil {
 		for k, v := range spec.Env {
+			// Fixed environment leak where we indiscriminately unset variables that might have already existed
+			if origV, exists := os.LookupEnv(k); exists {
+				originalEnv[k] = &origV
+			} else {
+				originalEnv[k] = nil
+			}
 			os.Setenv(k, v)
 		}
 	}
@@ -63,7 +70,11 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 
 	if spec.Env != nil {
 		for k := range spec.Env {
-			os.Unsetenv(k)
+			if origV, ok := originalEnv[k]; ok && origV != nil {
+				os.Setenv(k, *origV)
+			} else {
+				os.Unsetenv(k)
+			}
 		}
 	}
 	envMutex.Unlock()

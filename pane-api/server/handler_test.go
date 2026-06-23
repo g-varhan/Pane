@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -82,4 +83,34 @@ func TestPaneServiceValidation(t *testing.T) {
 			t.Errorf("Expected response ID 'non-existent-vm', got '%s'", resp.Id)
 		}
 	})
+}
+
+func TestEnvVarRestoration(t *testing.T) {
+	// Setup fake server
+	server := &PaneServer{}
+
+	// Create request with mocked variables
+	req := &pb.SpawnRequest{
+		Id:         "test-vm-env",
+		KernelPath: "/fake/kernel",
+		RootfsPath: "/fake/rootfs",
+		SpecJson:   `{"env": {"TEST_PANE_ENV": "mutated_value", "TEST_PANE_NEW_ENV": "new_value"}}`,
+	}
+
+	// Set preexisting var
+	os.Setenv("TEST_PANE_ENV", "original_value")
+	defer os.Unsetenv("TEST_PANE_ENV")
+
+	// Call Spawn (it will fail since /fake paths are invalid, but it executes the env tracking logic first)
+	_, _ = server.Spawn(context.Background(), req)
+
+	// Validate preexisting var is restored
+	if val := os.Getenv("TEST_PANE_ENV"); val != "original_value" {
+		t.Errorf("Expected TEST_PANE_ENV to be 'original_value', got '%s'", val)
+	}
+
+	// Validate newly introduced var is correctly removed
+	if val, exists := os.LookupEnv("TEST_PANE_NEW_ENV"); exists {
+		t.Errorf("Expected TEST_PANE_NEW_ENV to be unset, got '%s'", val)
+	}
 }
