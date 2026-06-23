@@ -174,6 +174,11 @@ func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 
+	// Prevent path traversal by ensuring the sanitized name is valid
+	if filepath.Clean("/"+name) == "/" {
+		return fmt.Errorf("invalid image name: %q", ref)
+	}
+
 	imagesDir := getImagesDir()
 	targetDir := filepath.Join(imagesDir, name, "v1.0")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -612,6 +617,12 @@ func ListImages() ([]ImageInfo, error) {
 func RemoveImage(name string) error {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+
+	// Prevent path traversal
+	if filepath.Clean("/"+name) == "/" {
+		return fmt.Errorf("invalid image name")
+	}
+
 	dir := getImagesDir()
 	target := filepath.Join(dir, name)
 	if _, err := os.Stat(target); os.IsNotExist(err) {
@@ -623,6 +634,12 @@ func RemoveImage(name string) error {
 func InspectImage(name string) (*PaneSpec, error) {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+
+	// Prevent path traversal
+	if filepath.Clean("/"+name) == "/" {
+		return nil, fmt.Errorf("invalid image name")
+	}
+
 	dir := getImagesDir()
 	vDir := filepath.Join(dir, name, "v1.0")
 	specPath := filepath.Join(vDir, "panespec.json")
