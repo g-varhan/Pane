@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -80,6 +81,35 @@ func TestPaneServiceValidation(t *testing.T) {
 		}
 		if resp.Id != "non-existent-vm" {
 			t.Errorf("Expected response ID 'non-existent-vm', got '%s'", resp.Id)
+		}
+	})
+
+	t.Run("Spawn Env Restoration", func(t *testing.T) {
+
+		// Pre-set an environment variable
+		originalKey := "TEST_PANE_ORIGINAL_VAR"
+		originalValue := "original_value"
+		os.Setenv(originalKey, originalValue)
+		defer os.Unsetenv(originalKey)
+
+		// A variable that we will set during spawn but doesn't exist now
+		newKey := "TEST_PANE_NEW_VAR"
+		os.Unsetenv(newKey)
+
+		// Construct a request that sets both
+		specJson := `{"env": {"TEST_PANE_ORIGINAL_VAR": "overridden_value", "TEST_PANE_NEW_VAR": "new_value"}}`
+		_, _ = client.Spawn(ctx, &pb.SpawnRequest{
+			Id:       "test-env-vm",
+			SpecJson: specJson,
+		})
+
+		// Check restoration
+		if val := os.Getenv(originalKey); val != originalValue {
+			t.Errorf("Expected original value '%s', got '%s'", originalValue, val)
+		}
+
+		if val, exists := os.LookupEnv(newKey); exists {
+			t.Errorf("Expected new key to be unset, but got '%s'", val)
 		}
 	})
 }
