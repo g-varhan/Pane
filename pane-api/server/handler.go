@@ -53,20 +53,37 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 	}
 
 	envMutex.Lock()
+	// Track original environment variables to prevent corrupting the host process
+	type origEnv struct {
+		val string
+		set bool
+	}
+	originals := make(map[string]origEnv)
+
 	if spec.Env != nil {
 		for k, v := range spec.Env {
+			val, set := os.LookupEnv(k)
+			originals[k] = origEnv{val: val, set: set}
 			os.Setenv(k, v)
 		}
 	}
 
+	// Use defer to guarantee environment restoration and mutex unlocking
+	defer func() {
+		if spec.Env != nil {
+			for k := range spec.Env {
+				if orig, ok := originals[k]; ok && orig.set {
+					os.Setenv(k, orig.val)
+				} else {
+					os.Unsetenv(k)
+				}
+			}
+		}
+		envMutex.Unlock()
+	}()
+
 	cid, pid, err := ffi.Spawn(req.Id, spec)
 
-	if spec.Env != nil {
-		for k := range spec.Env {
-			os.Unsetenv(k)
-		}
-	}
-	envMutex.Unlock()
 	if err != nil {
 		// Attempt to read QEMU logs to give a more informative error message
 		logPath := fmt.Sprintf("/run/pane/qemu-%s.log", req.Id)
