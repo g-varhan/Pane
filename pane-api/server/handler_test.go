@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -80,6 +81,25 @@ func TestPaneServiceValidation(t *testing.T) {
 		}
 		if resp.Id != "non-existent-vm" {
 			t.Errorf("Expected response ID 'non-existent-vm', got '%s'", resp.Id)
+		}
+	})
+
+	t.Run("Spawn Env Restore", func(t *testing.T) {
+		os.Setenv("TEST_ENV_VAR", "original_value")
+		defer os.Unsetenv("TEST_ENV_VAR")
+
+		req := &pb.SpawnRequest{
+			Id:       "test-id",
+			SpecJson: `{"env": {"TEST_ENV_VAR": "new_value", "NEW_VAR": "value2"}}`,
+		}
+
+		client.Spawn(ctx, req)
+
+		if val := os.Getenv("TEST_ENV_VAR"); val != "original_value" {
+			t.Errorf("Expected TEST_ENV_VAR to be 'original_value', got %q", val)
+		}
+		if _, exists := os.LookupEnv("NEW_VAR"); exists {
+			t.Errorf("Expected NEW_VAR to be unset")
 		}
 	})
 }

@@ -53,8 +53,19 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 	}
 
 	envMutex.Lock()
+
+	// Track original environment variables to prevent host environment corruption
+	// when temporarily passing env vars to Rust FFI
+	type envState struct {
+		val    string
+		exists bool
+	}
+	originalEnv := make(map[string]envState)
+
 	if spec.Env != nil {
 		for k, v := range spec.Env {
+			val, exists := os.LookupEnv(k)
+			originalEnv[k] = envState{val: val, exists: exists}
 			os.Setenv(k, v)
 		}
 	}
@@ -63,7 +74,12 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 
 	if spec.Env != nil {
 		for k := range spec.Env {
-			os.Unsetenv(k)
+			orig := originalEnv[k]
+			if orig.exists {
+				os.Setenv(k, orig.val)
+			} else {
+				os.Unsetenv(k)
+			}
 		}
 	}
 	envMutex.Unlock()
