@@ -93,3 +93,46 @@ func TestPullContainerImage(t *testing.T) {
 		t.Errorf("expected spec disk path %s, got %s", diskPath, *spec.Disk.Path)
 	}
 }
+
+func TestImageNameValidation(t *testing.T) {
+	invalidNames := []string{
+		"",
+		".",
+		"..",
+		"../..", // strings.ReplaceAll makes this "..-.." which is actually valid as an entity, but ".." is the main concern for os.RemoveAll(".") which could be achieved via "." or ".." passing through
+	}
+
+	for _, name := range invalidNames {
+		// Test RemoveImage
+		err := RemoveImage(name)
+		if err == nil {
+			t.Errorf("expected error when removing invalid image name %q, got nil", name)
+		} else if err.Error() != "invalid image name: \""+name+"\"" && name != "../.." {
+			// For "../.." it gets sanitized to "..-.." and might return a "not found" error, which is fine since it's not a path traversal.
+			// But for "", ".", ".." it MUST return our validation error.
+			if name == "" || name == "." || name == ".." {
+				t.Errorf("expected validation error for %q, got: %v", name, err)
+			}
+		}
+
+		// Test InspectImage
+		_, err = InspectImage(name)
+		if err == nil {
+			t.Errorf("expected error when inspecting invalid image name %q, got nil", name)
+		} else if err.Error() != "invalid image name: \""+name+"\"" && name != "../.." {
+			if name == "" || name == "." || name == ".." {
+				t.Errorf("expected validation error for %q, got: %v", name, err)
+			}
+		}
+
+		// Test PullImage (with dummy func)
+		err = PullImage(name, func(_, _ string) error { return nil })
+		if err == nil {
+			t.Errorf("expected error when pulling invalid image name %q, got nil", name)
+		} else if err.Error() != "invalid image name: \""+name+"\"" && name != "../.." {
+			if name == "" || name == "." || name == ".." {
+				t.Errorf("expected validation error for %q, got: %v", name, err)
+			}
+		}
+	}
+}
