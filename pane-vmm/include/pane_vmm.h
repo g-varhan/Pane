@@ -6,6 +6,7 @@
 #include <linux/kvm.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // Maximum number of memory slots supported
 #define PANE_VMM_MAX_MEM_SLOTS 256

@@ -53,8 +53,18 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 	}
 
 	envMutex.Lock()
+
+	// Track original environment variables to prevent corrupting host process
+	type envState struct {
+		val string
+		set bool
+	}
+	originalEnv := make(map[string]envState)
+
 	if spec.Env != nil {
 		for k, v := range spec.Env {
+			val, set := os.LookupEnv(k)
+			originalEnv[k] = envState{val: val, set: set}
 			os.Setenv(k, v)
 		}
 	}
@@ -63,7 +73,12 @@ func (s *PaneServer) Spawn(ctx context.Context, req *pb.SpawnRequest) (*pb.Spawn
 
 	if spec.Env != nil {
 		for k := range spec.Env {
-			os.Unsetenv(k)
+			orig, ok := originalEnv[k]
+			if ok && orig.set {
+				os.Setenv(k, orig.val)
+			} else {
+				os.Unsetenv(k)
+			}
 		}
 	}
 	envMutex.Unlock()
