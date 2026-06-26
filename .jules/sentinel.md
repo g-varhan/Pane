@@ -3,3 +3,8 @@
 **Vulnerability:** Tar extraction logic in `pane-api/panespec/container.go` passed untrusted header names to `filepath.Clean` and `filepath.Join`, enabling zip slip vulnerabilities.
 **Learning:** `filepath.Join` in Go does not inherently sandbox paths to a specific root directory. If the untrusted input contains `../` sequences that break out of the directory structure when evaluated relative to the current directory, it escapes the expected base path (e.g. `filepath.Join("/base", "../../etc/passwd")` resolves to `/etc/passwd`).
 **Prevention:** Always prefix untrusted archive entry paths with `/` before calling `filepath.Clean` to force absolute path resolution, trim the leading slash, and then join with the base directory to safely confine extraction.
+
+## 2026-06-26 - [Arbitrary Directory Deletion via Unsanitized Input]
+**Vulnerability:** Path traversal vulnerability in image management functions (RemoveImage, InspectImage, PullImage) allowed attackers to supply '.' or '..' as the image name, escaping the base directory and affecting arbitrary host directories (e.g., removing the entire images base dir).
+**Learning:** String replacement of slashes and colons is insufficient to prevent path traversal if the malicious input consists entirely of '.' or '..', as these evaluate to current or parent directories in filepath.Join without needing slashes.
+**Prevention:** Implement strict input validation to explicitly reject empty strings, '.', and '..' before using user-supplied names in path construction functions.
