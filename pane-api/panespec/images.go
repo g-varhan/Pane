@@ -612,6 +612,13 @@ func ListImages() ([]ImageInfo, error) {
 func RemoveImage(name string) error {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+
+	// Fixed arbitrary directory deletion where an empty string, ".", or ".."
+	// evaluates to the base image directory or above, destroying all images.
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid image name: %q", name)
+	}
+
 	dir := getImagesDir()
 	target := filepath.Join(dir, name)
 	if _, err := os.Stat(target); os.IsNotExist(err) {
