@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #ifndef PANE_VMM_H
+#include <stdbool.h>
 #define PANE_VMM_H
 
 #include <linux/kvm.h>
