@@ -168,11 +168,18 @@ func getImagesDir() string {
 // PullImage resolves the ref (built-in distro, local file, GitHub release, or
 // HTTP/HTTPS URL) and registers the image in /var/lib/pane/images.
 func PullImage(ref string, ctrPullFunc func(string, string) error) error {
+	// Fixed path traversal and empty name logic where invalid inputs escape sandbox
+	if ref == "" || ref == "." || ref == ".." {
+		return fmt.Errorf("invalid image reference %q", ref)
+	}
 	name := strings.TrimPrefix(ref, "pane://")
 	name = strings.TrimPrefix(name, "docker://")
 	name = strings.TrimPrefix(name, "oci://")
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid image name %q", name)
+	}
 
 	imagesDir := getImagesDir()
 	targetDir := filepath.Join(imagesDir, name, "v1.0")
@@ -610,6 +617,10 @@ func ListImages() ([]ImageInfo, error) {
 }
 
 func RemoveImage(name string) error {
+	// Fixed path traversal and empty name logic where invalid inputs escape sandbox
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid image name %q", name)
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	dir := getImagesDir()
@@ -621,6 +632,10 @@ func RemoveImage(name string) error {
 }
 
 func InspectImage(name string) (*PaneSpec, error) {
+	// Fixed path traversal and empty name logic where invalid inputs escape sandbox
+	if name == "" || name == "." || name == ".." {
+		return nil, fmt.Errorf("invalid image name %q", name)
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	dir := getImagesDir()
