@@ -2,6 +2,7 @@
 
 #ifndef PANE_VMM_H
 #define PANE_VMM_H
+#include <stdbool.h>
 
 #include <linux/kvm.h>
 #include <stddef.h>

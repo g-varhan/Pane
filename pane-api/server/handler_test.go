@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -82,4 +83,37 @@ func TestPaneServiceValidation(t *testing.T) {
 			t.Errorf("Expected response ID 'non-existent-vm', got '%s'", resp.Id)
 		}
 	})
+}
+
+func TestHandler_EnvRace(t *testing.T) {
+	// This tests that our environment variable tracking correctly restores
+	// the environment to its original state.
+
+	// Create a mock server
+	srv := &PaneServer{}
+
+	// Set an initial environment variable
+	t.Setenv("TEST_PANE_ENV", "original_value")
+
+	// Prepare spawn request that sets the same environment variable
+	req := &pb.SpawnRequest{
+		Id: "test-vm",
+		SpecJson: `{"vmm":"firecracker","cpus":1,"memory":"128MiB","disk":{"path":"/tmp/disk","format":"raw"},"kernel":"/tmp/kernel","cmdline":"console=ttyS0","env":{"TEST_PANE_ENV":"overwritten_value","TEST_PANE_NEW_ENV":"new_value"}}`,
+	}
+
+	// Call Spawn (this will fail because FFI isn't set up, but we only care about the env vars)
+	// We run it and let it fail, then check the env vars.
+	srv.Spawn(context.Background(), req)
+
+	// Check if the original environment variable was restored
+	val, ok := os.LookupEnv("TEST_PANE_ENV")
+	if !ok || val != "original_value" {
+		t.Errorf("Expected TEST_PANE_ENV to be 'original_value', got %q (exists: %v)", val, ok)
+	}
+
+	// Check if the new environment variable was unset
+	val, ok = os.LookupEnv("TEST_PANE_NEW_ENV")
+	if ok {
+		t.Errorf("Expected TEST_PANE_NEW_ENV to be unset, got %q", val)
+	}
 }
