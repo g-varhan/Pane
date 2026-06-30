@@ -624,8 +624,16 @@ func ListImages() ([]ImageInfo, error) {
 }
 
 func RemoveImage(name string) error {
+	originalName := name
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+
+	// Fixed path traversal vulnerability where deleting an image with name "", ".", or ".."
+	// would resolve to the images directory itself, causing os.RemoveAll to wipe out all images.
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid image name: %q", originalName)
+	}
+
 	dir := getImagesDir()
 	target := filepath.Join(dir, name)
 	if _, err := os.Stat(target); os.IsNotExist(err) {
