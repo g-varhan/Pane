@@ -624,6 +624,9 @@ func ListImages() ([]ImageInfo, error) {
 }
 
 func RemoveImage(name string) error {
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid image name %q", name)
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	dir := getImagesDir()
@@ -635,6 +638,9 @@ func RemoveImage(name string) error {
 }
 
 func InspectImage(name string) (*PaneSpec, error) {
+	if name == "" || name == "." || name == ".." {
+		return nil, fmt.Errorf("invalid image name %q", name)
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	dir := getImagesDir()
