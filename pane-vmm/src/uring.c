@@ -44,11 +44,6 @@ int pane_uring_submit_read(pane_vm_t *vm, int fd, void *buf, uint32_t len,
   io_uring_prep_read(sqe, fd, buf, len, offset);
   io_uring_sqe_set_data(sqe, user_data);
 
-  int ret = io_uring_submit(vm->ring);
-  if (ret < 0) {
-    return ret;
-  }
-
   return 0;
 }
 
@@ -68,11 +63,6 @@ int pane_uring_submit_write(pane_vm_t *vm, int fd, const void *buf,
 
   io_uring_prep_write(sqe, fd, buf, len, offset);
   io_uring_sqe_set_data(sqe, (void *)user_data);
-
-  int ret = io_uring_submit(vm->ring);
-  if (ret < 0) {
-    return ret;
-  }
 
   return 0;
 }

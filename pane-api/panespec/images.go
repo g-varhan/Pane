@@ -154,10 +154,24 @@ var knownDistros = map[string]distroEntry{
 
 func getImagesDir() string {
 	dir := "/var/lib/pane/images"
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		dir = filepath.Join(os.TempDir(), "pane/images")
-		_ = os.MkdirAll(dir, 0755)
+	err := os.MkdirAll(dir, 0755)
+	if err == nil {
+		// check if writable
+		testFile := filepath.Join(dir, ".write_test")
+		if f, err := os.Create(testFile); err == nil {
+			f.Close()
+			os.Remove(testFile)
+			return dir
+		}
 	}
+
+	// fallback to user home or temp
+	if home, err := os.UserHomeDir(); err == nil {
+		dir = filepath.Join(home, ".pane/images")
+	} else {
+		dir = filepath.Join(os.TempDir(), "pane/images")
+	}
+	_ = os.MkdirAll(dir, 0755)
 	return dir
 }
 

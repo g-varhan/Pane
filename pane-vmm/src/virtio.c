@@ -3,6 +3,7 @@
 #include "pane_vmm.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <linux/kvm.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -377,6 +378,13 @@ struct virtio_blk_req_hdr {
   uint64_t sector;
 } __attribute__((packed));
 
+struct virtio_blk_req {
+  struct virtio_mmio_blk *dev;
+  uint16_t head;
+  uint32_t data_len;
+  uint8_t *status_buf;
+};
+
 struct virtio_mmio_blk {
   struct virtio_mmio_dev base;
   pane_vm_t *vm;
@@ -390,7 +398,56 @@ struct virtio_mmio_blk {
   uint32_t status;
 
   struct virtio_queue queues[1]; // 0: request queue
+
+  pthread_t completion_thread;
+  int completion_thread_active;
+  volatile int shutdown;
 };
+
+static void *virtio_blk_completion_thread(void *arg) {
+  struct virtio_mmio_blk *dev = (struct virtio_mmio_blk *)arg;
+  pane_vm_t *vm = dev->vm;
+  struct io_uring_cqe *cqe;
+
+  while (!dev->shutdown) {
+    int ret = io_uring_wait_cqe(vm->ring, &cqe);
+    if (ret < 0) {
+      if (ret == -EINTR) continue;
+      break;
+    }
+    if (cqe) {
+      struct virtio_blk_req *req = io_uring_cqe_get_data(cqe);
+      if (req) {
+        struct virtio_queue *q = &dev->queues[0];
+
+        *req->status_buf = (cqe->res >= 0) ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
+
+        struct virtq_used *used_ring = pane_vm_gpa_to_hva(vm, q->used_gpa);
+        if (used_ring) {
+          uint32_t used_idx = used_ring->idx % q->num;
+          used_ring->ring[used_idx].id = req->head;
+          used_ring->ring[used_idx].len = req->data_len;
+          __sync_synchronize();
+          used_ring->idx++;
+        }
+
+        __sync_fetch_and_or(&dev->interrupt_status, 0x1);
+
+        struct kvm_irq_level level = {
+            .irq = dev->base.irq,
+            .level = 1,
+        };
+        ioctl(pane_vm_get_vm_fd(vm), KVM_IRQ_LINE, &level);
+        level.level = 0;
+        ioctl(pane_vm_get_vm_fd(vm), KVM_IRQ_LINE, &level);
+
+        free(req);
+      }
+      io_uring_cqe_seen(vm->ring, cqe);
+    }
+  }
+  return NULL;
+}
 
 static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
   struct virtio_queue *q = &dev->queues[0];
@@ -404,6 +461,9 @@ static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
   if (!desc_table || !avail_ring || !used_ring)
     return;
 
+  int submitted = 0;
+  int sync_completed = 0;
+
   while (q->last_avail_idx != avail_ring->idx) {
     uint16_t head = avail_ring->ring[q->last_avail_idx % q->num];
     if (head >= q->num) {
@@ -412,7 +472,6 @@ static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
     }
     uint16_t curr = head;
 
-    // Read header descriptor (contains type, sector)
     struct virtio_blk_req_hdr *hdr =
         pane_vm_gpa_to_hva(dev->vm, desc_table[curr].addr);
     if (!hdr || desc_table[curr].len < sizeof(struct virtio_blk_req_hdr)) {
@@ -420,7 +479,6 @@ static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
       continue;
     }
 
-    // The next descriptor in chain is the data buffer
     if (!(desc_table[curr].flags & VIRTQ_DESC_F_NEXT)) {
       q->last_avail_idx++;
       continue;
@@ -433,7 +491,6 @@ static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
     void *data_buf = pane_vm_gpa_to_hva(dev->vm, desc_table[curr].addr);
     uint32_t data_len = desc_table[curr].len;
 
-    // The next/last descriptor is the status byte
     if (!(desc_table[curr].flags & VIRTQ_DESC_F_NEXT)) {
       q->last_avail_idx++;
       continue;
@@ -451,6 +508,23 @@ static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
       continue;
     }
 
+    struct virtio_blk_req *req = malloc(sizeof(struct virtio_blk_req));
+    if (!req) {
+      *status_buf = VIRTIO_BLK_S_IOERR;
+      uint32_t used_idx = used_ring->idx % q->num;
+      used_ring->ring[used_idx].id = head;
+      used_ring->ring[used_idx].len = 0;
+      used_ring->idx++;
+      sync_completed++;
+      q->last_avail_idx++;
+      continue;
+    }
+
+    req->dev = dev;
+    req->head = head;
+    req->data_len = data_len;
+    req->status_buf = status_buf;
+
     uint64_t file_offset = hdr->sector * 512;
     int io_ret = 0;
 
@@ -459,62 +533,45 @@ static void virtio_blk_process_queue(struct virtio_mmio_blk *dev) {
                                         uint32_t len, uint64_t offset,
                                         void *user_data);
       io_ret = pane_uring_submit_read(dev->vm, dev->disk_fd, data_buf, data_len,
-                                      file_offset, dev);
+                                      file_offset, req);
     } else if (hdr->type == VIRTIO_BLK_T_OUT) {
       extern int pane_uring_submit_write(pane_vm_t * vm, int fd,
                                          const void *buf, uint32_t len,
                                          uint64_t offset, void *user_data);
       io_ret = pane_uring_submit_write(dev->vm, dev->disk_fd, data_buf,
-                                       data_len, file_offset, dev);
+                                       data_len, file_offset, req);
     } else {
-      *status_buf = VIRTIO_BLK_S_UNSUPP;
       io_ret = -ENOTSUP;
     }
 
     if (io_ret == 0) {
-      void *completed_dev = NULL;
-      int32_t bytes_transferred = 0;
-      extern int pane_uring_poll_completions(
-          pane_vm_t * vm, void **user_data_out, int32_t *res_out);
-
-      while (1) {
-        int poll_ret = pane_uring_poll_completions(dev->vm, &completed_dev,
-                                                   &bytes_transferred);
-        if (poll_ret > 0 && completed_dev == dev) {
-          if (bytes_transferred >= 0) {
-            *status_buf = VIRTIO_BLK_S_OK;
-          } else {
-            *status_buf = VIRTIO_BLK_S_IOERR;
-          }
-          break;
-        } else if (poll_ret < 0) {
-          *status_buf = VIRTIO_BLK_S_IOERR;
-          break;
-        }
-        usleep(10);
-      }
-    } else if (io_ret != -ENOTSUP) {
-      *status_buf = VIRTIO_BLK_S_IOERR;
+      submitted++;
+    } else {
+      *status_buf = (io_ret == -ENOTSUP) ? VIRTIO_BLK_S_UNSUPP : VIRTIO_BLK_S_IOERR;
+      uint32_t used_idx = used_ring->idx % q->num;
+      used_ring->ring[used_idx].id = head;
+      used_ring->ring[used_idx].len = 0;
+      used_ring->idx++;
+      sync_completed++;
+      free(req);
     }
-
-    // Put head descriptor in the used ring
-    uint32_t used_idx = used_ring->idx % q->num;
-    used_ring->ring[used_idx].id = head;
-    used_ring->ring[used_idx].len = data_len;
-    used_ring->idx++;
 
     q->last_avail_idx++;
   }
 
-  // Inject interrupt to notify guest
-  dev->interrupt_status |= 0x1;
-  struct kvm_irq_level level = {
-      .irq = dev->base.irq,
-      .level = 1,
-  };
-  ioctl(pane_vm_get_vm_fd(dev->vm), KVM_IRQ_LINE, &level);
-  level.level = 0;
-  ioctl(pane_vm_get_vm_fd(dev->vm), KVM_IRQ_LINE, &level);
+  if (submitted > 0) {
+    io_uring_submit(dev->vm->ring);
+  }
+  if (sync_completed > 0) {
+    __sync_fetch_and_or(&dev->interrupt_status, 0x1);
+    struct kvm_irq_level level = {
+        .irq = dev->base.irq,
+        .level = 1,
+    };
+    ioctl(pane_vm_get_vm_fd(dev->vm), KVM_IRQ_LINE, &level);
+    level.level = 0;
+    ioctl(pane_vm_get_vm_fd(dev->vm), KVM_IRQ_LINE, &level);
+  }
 }
 
 static int pane_blk_handle_mmio(struct virtio_mmio_dev *dev_base,
@@ -564,7 +621,7 @@ static int pane_blk_handle_mmio(struct virtio_mmio_dev *dev_base,
       }
       break;
     case VIRTIO_MMIO_INTERRUPT_ACK:
-      dev->interrupt_status &= ~val;
+      __sync_fetch_and_and(&dev->interrupt_status, ~val);
       break;
     case VIRTIO_MMIO_STATUS:
       dev->status = val;
@@ -675,6 +732,16 @@ static int pane_blk_handle_mmio(struct virtio_mmio_dev *dev_base,
 
 static void pane_blk_free_dev(struct virtio_mmio_dev *dev_base) {
   struct virtio_mmio_blk *dev = (struct virtio_mmio_blk *)dev_base;
+  if (dev->completion_thread_active) {
+    dev->shutdown = 1;
+    struct io_uring_sqe *sqe = io_uring_get_sqe(dev->vm->ring);
+    if (sqe) {
+      io_uring_prep_nop(sqe);
+      io_uring_sqe_set_data(sqe, NULL);
+      io_uring_submit(dev->vm->ring);
+    }
+    pthread_join(dev->completion_thread, NULL);
+  }
   if (dev->disk_fd >= 0) {
     close(dev->disk_fd);
   }
@@ -720,6 +787,12 @@ int pane_vm_setup_virtio_blk(pane_vm_t *vm, uint64_t base_addr, uint64_t size,
     close(fd);
     free(dev);
     return ret;
+  }
+
+  dev->completion_thread_active = 0;
+  dev->shutdown = 0;
+  if (pthread_create(&dev->completion_thread, NULL, virtio_blk_completion_thread, dev) == 0) {
+    dev->completion_thread_active = 1;
   }
 
   return 0;

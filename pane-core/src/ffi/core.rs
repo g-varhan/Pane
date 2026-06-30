@@ -7,7 +7,16 @@ use crate::ffi::vmm::pane_vmm_config_t;
 use crate::ffi::SafeVm;
 use crate::vm::{Running, Spawning, Vm};
 use std::ffi::CStr;
+use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
+
+static RUNTIME: OnceCell<Runtime> = OnceCell::new();
+
+fn get_runtime() -> Result<&'static Runtime, libc::c_int> {
+    RUNTIME.get_or_try_init(|| {
+        Runtime::new().map_err(|_| -libc::ENOMEM)
+    })
+}
 
 fn error_to_errno(err: PaneError) -> libc::c_int {
     match err {
@@ -40,9 +49,9 @@ pub unsafe extern "C" fn pane_core_spawn(
         return -libc::EINVAL;
     }
 
-    let rt = match Runtime::new() {
+    let rt = match get_runtime() {
         Ok(r) => r,
-        Err(_) => return -libc::ENOMEM,
+        Err(e) => return e,
     };
 
     let cfg = &*config;
@@ -203,9 +212,9 @@ pub unsafe extern "C" fn pane_core_snapshot(
         return -libc::EINVAL;
     }
 
-    let rt = match Runtime::new() {
+    let rt = match get_runtime() {
         Ok(r) => r,
-        Err(_) => return -libc::ENOMEM,
+        Err(e) => return e,
     };
 
     rt.block_on(async {
@@ -262,9 +271,9 @@ pub unsafe extern "C" fn pane_core_fork(
         return -libc::EINVAL;
     }
 
-    let rt = match Runtime::new() {
+    let rt = match get_runtime() {
         Ok(r) => r,
-        Err(_) => return -libc::ENOMEM,
+        Err(e) => return e,
     };
 
     rt.block_on(async {
@@ -434,9 +443,9 @@ pub unsafe extern "C" fn pane_core_destroy(id: *const libc::c_char) -> libc::c_i
         return -libc::EINVAL;
     }
 
-    let rt = match Runtime::new() {
+    let rt = match get_runtime() {
         Ok(r) => r,
-        Err(_) => return -libc::ENOMEM,
+        Err(e) => return e,
     };
 
     rt.block_on(async {
@@ -479,9 +488,9 @@ pub unsafe extern "C" fn pane_core_exec(
         return -libc::EINVAL;
     }
 
-    let rt = match Runtime::new() {
+    let rt = match get_runtime() {
         Ok(r) => r,
-        Err(_) => return -libc::ENOMEM,
+        Err(e) => return e,
     };
 
     rt.block_on(async {

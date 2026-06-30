@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Pane Developers <info@pane.dev>
 Build-Depends: debhelper-compat (= 13), golang-go, cargo, rustc, clang, make, liburing-dev
 Standards-Version: 4.6.2
-Homepage: https://github.com/pane-vmm/pane
+Homepage: https://github.com/g-varhan/Pane
 
 Package: pane
 Architecture: amd64

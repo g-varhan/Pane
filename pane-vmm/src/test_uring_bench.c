@@ -133,6 +133,7 @@ int main() {
   // Submit and reap concurrently to keep the pipeline full
   while (completed < NUM_BLOCKS) {
     // Submit up to QUEUE_DEPTH requests
+    int new_submissions = 0;
     while (submitted < NUM_BLOCKS && (submitted - completed) < QUEUE_DEPTH) {
       ret = pane_uring_submit_read(vm, fd, buffers[submitted], BENCH_BLOCK_SIZE,
                                    submitted * BENCH_BLOCK_SIZE,
@@ -146,6 +147,10 @@ int main() {
         return 1;
       }
       submitted++;
+      new_submissions++;
+    }
+    if (new_submissions > 0) {
+      io_uring_submit(vm->ring);
     }
 
     // Reap completed requests

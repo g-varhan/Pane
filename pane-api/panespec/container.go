@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -69,15 +70,23 @@ func PullContainerImage(ref, targetDir string) error {
 
 	fmt.Printf("Extracting %d layers...\n", len(layers))
 	for i, layer := range layers {
-		fmt.Printf("Extracting layer %d/%d...\n", i+1, len(layers))
+		size, _ := layer.Size()
+		fmt.Printf("\nExtracting layer %d/%d (%.1f MB)...\n", i+1, len(layers), float64(size)/(1024*1024))
+		pw := &progressWriter{
+			total:     size,
+			barWidth:  30,
+			startTime: time.Now(),
+			lastPrint: time.Now(),
+		}
 		rc, err := layer.Compressed()
 		if err != nil {
 			return fmt.Errorf("failed to get layer reader: %w", err)
 		}
 
 		// Decompress layer if gzipped
-		var reader io.Reader = rc
-		gr, err := gzip.NewReader(rc)
+		var baseReader io.Reader = io.TeeReader(rc, pw)
+		var reader io.Reader = baseReader
+		gr, err := gzip.NewReader(baseReader)
 		if err == nil {
 			reader = gr
 		}
@@ -90,6 +99,7 @@ func PullContainerImage(ref, targetDir string) error {
 			}
 			if err != nil {
 				rc.Close()
+				pw.finish()
 				if gr != nil {
 					gr.Close()
 				}
@@ -124,6 +134,7 @@ func PullContainerImage(ref, targetDir string) error {
 			case tar.TypeDir:
 				if err := os.MkdirAll(target, 0755); err != nil {
 					rc.Close()
+					pw.finish()
 					if gr != nil {
 						gr.Close()
 					}
@@ -134,6 +145,7 @@ func PullContainerImage(ref, targetDir string) error {
 				f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode())
 				if err != nil {
 					rc.Close()
+					pw.finish()
 					if gr != nil {
 						gr.Close()
 					}
@@ -142,6 +154,7 @@ func PullContainerImage(ref, targetDir string) error {
 				if _, err := io.Copy(f, tr); err != nil {
 					f.Close()
 					rc.Close()
+					pw.finish()
 					if gr != nil {
 						gr.Close()
 					}
@@ -153,6 +166,7 @@ func PullContainerImage(ref, targetDir string) error {
 				_ = os.Remove(target)
 				if err := os.Symlink(header.Linkname, target); err != nil {
 					rc.Close()
+					pw.finish()
 					if gr != nil {
 						gr.Close()
 					}
@@ -164,6 +178,7 @@ func PullContainerImage(ref, targetDir string) error {
 				oldPath := secureJoin(tempRootfsDir, header.Linkname)
 				if err := os.Link(oldPath, target); err != nil {
 					rc.Close()
+					pw.finish()
 					if gr != nil {
 						gr.Close()
 					}
@@ -175,6 +190,7 @@ func PullContainerImage(ref, targetDir string) error {
 			gr.Close()
 		}
 		rc.Close()
+		pw.finish()
 	}
 
 	// 2. Inject vsock agent (pane-agent) and custom init
@@ -372,7 +388,7 @@ func checkFilesystem(path string) error {
 	}
 	// EXT4_SUPER_MAGIC is 0xEF53
 	if stat.Type == 0xEF53 {
-		return fmt.Errorf("conversion cache requires btrfs or xfs. Configure with PANE_IMAGE_CACHE=/path/on/btrfs")
+		fmt.Printf("  ⚠  Warning: Images directory is on ext4. 'pane fork' (reflinking) may be slow or fail. btrfs or xfs is recommended.\n")
 	}
 	return nil
 }
