@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 // Maximum number of memory slots supported
+#include <stdbool.h>
 #define PANE_VMM_MAX_MEM_SLOTS 256
 
 // Forward declaration

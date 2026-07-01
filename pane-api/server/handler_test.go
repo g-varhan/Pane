@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -80,6 +81,31 @@ func TestPaneServiceValidation(t *testing.T) {
 		}
 		if resp.Id != "non-existent-vm" {
 			t.Errorf("Expected response ID 'non-existent-vm', got '%s'", resp.Id)
+		}
+	})
+
+	t.Run("Spawn Env Restoration", func(t *testing.T) {
+		// Set an initial environment variable
+		os.Setenv("PANE_TEST_EXISTING_ENV", "original_value")
+		defer os.Unsetenv("PANE_TEST_EXISTING_ENV")
+
+		// Ensure another variable is NOT set
+		os.Unsetenv("PANE_TEST_NEW_ENV")
+
+		_, _ = client.Spawn(ctx, &pb.SpawnRequest{
+			Id: "test-env-vm",
+			SpecJson: `{"env": {"PANE_TEST_EXISTING_ENV": "temp_value", "PANE_TEST_NEW_ENV": "new_value"}}`,
+		})
+
+		// It will fail because kernel_path etc are empty, but it parses spec and sets/unsets env variables.
+		// Let's verify original state is restored
+
+		if val := os.Getenv("PANE_TEST_EXISTING_ENV"); val != "original_value" {
+			t.Errorf("Expected PANE_TEST_EXISTING_ENV to be restored to 'original_value', got '%s'", val)
+		}
+
+		if _, ok := os.LookupEnv("PANE_TEST_NEW_ENV"); ok {
+			t.Errorf("Expected PANE_TEST_NEW_ENV to be unset, but it was set")
 		}
 	})
 }
