@@ -623,9 +623,19 @@ func ListImages() ([]ImageInfo, error) {
 	return list, nil
 }
 
+func validateImageName(name string) error {
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid image name: must not be empty or contain path traversal characters")
+	}
+	return nil
+}
+
 func RemoveImage(name string) error {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+	if err := validateImageName(name); err != nil {
+		return err
+	}
 	dir := getImagesDir()
 	target := filepath.Join(dir, name)
 	if _, err := os.Stat(target); os.IsNotExist(err) {
@@ -637,6 +647,9 @@ func RemoveImage(name string) error {
 func InspectImage(name string) (*PaneSpec, error) {
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
+	if err := validateImageName(name); err != nil {
+		return nil, err
+	}
 	dir := getImagesDir()
 	vDir := filepath.Join(dir, name, "v1.0")
 	specPath := filepath.Join(vDir, "panespec.json")
