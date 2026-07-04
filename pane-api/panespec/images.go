@@ -179,12 +179,27 @@ func getImagesDir() string {
 // PullImage
 // ────────────────────────────────────────────────────────────────────────────
 
+// validateImageName strictly rejects empty strings and path traversal sequences
+// ("." and "..") to prevent critical file deletion or exposure vulnerabilities.
+func validateImageName(name string) error {
+	if name == "" {
+		return fmt.Errorf("image name cannot be empty")
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("invalid image name: %q", name)
+	}
+	return nil
+}
+
 // PullImage resolves the ref (built-in distro, local file, GitHub release, or
 // HTTP/HTTPS URL) and registers the image in /var/lib/pane/images.
 func PullImage(ref string, ctrPullFunc func(string, string) error) error {
 	name := strings.TrimPrefix(ref, "pane://")
 	name = strings.TrimPrefix(name, "docker://")
 	name = strings.TrimPrefix(name, "oci://")
+	if err := validateImageName(name); err != nil {
+		return err
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 
@@ -624,6 +639,9 @@ func ListImages() ([]ImageInfo, error) {
 }
 
 func RemoveImage(name string) error {
+	if err := validateImageName(name); err != nil {
+		return err
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	dir := getImagesDir()
@@ -635,6 +653,9 @@ func RemoveImage(name string) error {
 }
 
 func InspectImage(name string) (*PaneSpec, error) {
+	if err := validateImageName(name); err != nil {
+		return nil, err
+	}
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	dir := getImagesDir()
